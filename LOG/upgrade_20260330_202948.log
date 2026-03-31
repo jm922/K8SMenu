@@ -1,0 +1,19 @@
+[2026-03-30 20:29:48] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-03-30 20:29:48] [INFO] Scanning UPGRADE_TMP for .py files...
+[2026-03-30 20:29:48] [INFO] Found 4 .py file(s) to process.
+[2026-03-30 20:29:48] [WARNING] Skipping github_upload.py: target file does not exist.
+[2026-03-30 20:29:48] [WARNING] Skipping lang.py: target file does not exist.
+[2026-03-30 20:29:48] [INFO] Backed up /home/jun/k8s_manager/version.py -> /home/jun/k8s_manager/version.py.bak
+[2026-03-30 20:29:48] [INFO] Original permissions for version.py: 0o100664
+[2026-03-30 20:29:48] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/version.py -> /home/jun/k8s_manager/version.py
+[2026-03-30 20:29:48] [INFO] Restored permissions for version.py to 0o100664
+[2026-03-30 20:29:48] [INFO] Backed up /home/jun/k8s_manager/main.py -> /home/jun/k8s_manager/main.py.bak
+[2026-03-30 20:29:48] [INFO] Original permissions for main.py: 0o100664
+[2026-03-30 20:29:48] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/main.py -> /home/jun/k8s_manager/main.py
+[2026-03-30 20:29:48] [INFO] Restored permissions for main.py to 0o100664
+[2026-03-30 20:29:48] [INFO] Starting post-upgrade health check...
+[2026-03-30 20:29:48] [INFO] Performing post-upgrade health check...
+[2026-03-30 20:29:49] [INFO] Health check succeeded.
+[2026-03-30 20:29:49] [INFO] Health check passed. Upgrade successful.
+[2026-03-30 20:29:49] [INFO] Removed backup /home/jun/k8s_manager/version.py.bak
+[2026-03-30 20:29:49] [INFO] Removed backup /home/jun/k8s_manager/main.py.bak

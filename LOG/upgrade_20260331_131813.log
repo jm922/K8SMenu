@@ -1,0 +1,32 @@
+[2026-03-31 13:18:13] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-03-31 13:18:13] [INFO] Scanning UPGRADE_TMP for .py files...
+[2026-03-31 13:18:13] [INFO] Found 5 .py file(s) to process.
+[2026-03-31 13:18:13] [INFO] Backed up /home/jun/k8s_manager/version.py -> /home/jun/k8s_manager/version.py.bak
+[2026-03-31 13:18:13] [INFO] Original permissions for version.py: 0o100664
+[2026-03-31 13:18:13] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/version.py -> /home/jun/k8s_manager/version.py
+[2026-03-31 13:18:13] [INFO] Restored permissions for version.py to 0o100664
+[2026-03-31 13:18:13] [INFO] Backed up /home/jun/k8s_manager/main.py -> /home/jun/k8s_manager/main.py.bak
+[2026-03-31 13:18:13] [INFO] Original permissions for main.py: 0o100664
+[2026-03-31 13:18:13] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/main.py -> /home/jun/k8s_manager/main.py
+[2026-03-31 13:18:13] [INFO] Restored permissions for main.py to 0o100664
+[2026-03-31 13:18:13] [INFO] Backed up /home/jun/k8s_manager/utils/lang.py -> /home/jun/k8s_manager/utils/lang.py.bak
+[2026-03-31 13:18:13] [INFO] Original permissions for utils/lang.py: 0o100664
+[2026-03-31 13:18:13] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/utils/lang.py -> /home/jun/k8s_manager/utils/lang.py
+[2026-03-31 13:18:13] [INFO] Restored permissions for utils/lang.py to 0o100664
+[2026-03-31 13:18:13] [INFO] Backed up /home/jun/k8s_manager/tools/github_upload.py -> /home/jun/k8s_manager/tools/github_upload.py.bak
+[2026-03-31 13:18:13] [INFO] Original permissions for tools/github_upload.py: 0o100664
+[2026-03-31 13:18:13] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/tools/github_upload.py -> /home/jun/k8s_manager/tools/github_upload.py
+[2026-03-31 13:18:13] [INFO] Restored permissions for tools/github_upload.py to 0o100664
+[2026-03-31 13:18:13] [INFO] Backed up /home/jun/k8s_manager/tools/upgrade.py -> /home/jun/k8s_manager/tools/upgrade.py.bak
+[2026-03-31 13:18:13] [INFO] Original permissions for tools/upgrade.py: 0o100664
+[2026-03-31 13:18:13] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/tools/upgrade.py -> /home/jun/k8s_manager/tools/upgrade.py
+[2026-03-31 13:18:13] [INFO] Restored permissions for tools/upgrade.py to 0o100664
+[2026-03-31 13:18:13] [INFO] Starting post-upgrade health check...
+[2026-03-31 13:18:13] [INFO] Performing post-upgrade health check...
+[2026-03-31 13:18:13] [INFO] Health check succeeded.
+[2026-03-31 13:18:13] [INFO] Health check passed. Upgrade successful.
+[2026-03-31 13:18:13] [INFO] Removed backup /home/jun/k8s_manager/version.py.bak
+[2026-03-31 13:18:13] [INFO] Removed backup /home/jun/k8s_manager/main.py.bak
+[2026-03-31 13:18:13] [INFO] Removed backup /home/jun/k8s_manager/utils/lang.py.bak
+[2026-03-31 13:18:13] [INFO] Removed backup /home/jun/k8s_manager/tools/github_upload.py.bak
+[2026-03-31 13:18:13] [INFO] Removed backup /home/jun/k8s_manager/tools/upgrade.py.bak

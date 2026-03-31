@@ -1,0 +1,5 @@
+[2026-03-31 13:38:16] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-03-31 13:38:16] [INFO] Found 2 .py file(s) to process.
+[2026-03-31 13:38:16] [WARNING] Multiple matches for version.py: ['/home/jun/k8s_manager/version.py', '/home/jun/k8s_manager/UPGRADE_TMP/version.py']
+[2026-03-31 13:38:16] [WARNING] Multiple matches for upgrade.py: ['/home/jun/k8s_manager/UPGRADE_TMP/upgrade.py', '/home/jun/k8s_manager/tools/upgrade.py']
+[2026-03-31 13:38:16] [ERROR] No files were successfully upgraded. Aborting.

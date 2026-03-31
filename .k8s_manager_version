@@ -1,0 +1,54 @@
+{
+  "current_version": "V0.78",
+  "history": [
+    {
+      "timestamp": "2026-03-30 18:42:46",
+      "old_version": "N/A",
+      "new_version": "V0.75",
+      "change_type": "Improvement",
+      "description": "Improved Git CLI upload when no changes detected",
+      "changes": [
+        "Now attempts to push existing commits even if no new changes",
+        "Provides clear feedback when file is already up-to-date"
+      ]
+    },
+    {
+      "timestamp": "2026-03-30 20:14:47",
+      "old_version": "V0.75",
+      "new_version": "V0.76",
+      "change_type": "Feature Enhancement",
+      "description": "Redesigned program upgrade with rollback and health check",
+      "changes": [
+        "Upgrade now works with UPGRADE_TMP directory (recursive .py files)",
+        "Automatic backup and permission restoration for each file",
+        "Post-upgrade health check (tests program startup)",
+        "Automatic rollback if health check fails",
+        "Detailed logging in LOG/upgrade_*.log"
+      ]
+    },
+    {
+      "timestamp": "2026-03-30 20:30:34",
+      "old_version": "V0.76",
+      "new_version": "V0.77",
+      "change_type": "Removal",
+      "description": "Removed PyGithub upload option (use Git CLI instead)",
+      "changes": [
+        "Removed 'Upload to GitHub (PyGithub)' from System Tools menu",
+        "Git CLI upload now handles entire project (adds all files)",
+        "Updated menu numbering for System Tools"
+      ]
+    },
+    {
+      "timestamp": "2026-03-31 13:45:09",
+      "old_version": "V0.77",
+      "new_version": "V0.78",
+      "change_type": "Improvement",
+      "description": "Enhanced upgrade script with delay and auto-cleanup",
+      "changes": [
+        "Added 5-second delays between critical steps for better readability",
+        "Upgrade now automatically deletes UPGRADE_TMP directory after success (optional)",
+        "Improved user experience with clearer progress indicators"
+      ]
+    }
+  ]
+}
