@@ -1,5 +1,5 @@
 {
-  "current_version": "V0.78",
+  "current_version": "V0.79",
   "history": [
     {
       "timestamp": "2026-03-30 18:42:46",
@@ -48,6 +48,18 @@
         "Added 5-second delays between critical steps for better readability",
         "Upgrade now automatically deletes UPGRADE_TMP directory after success (optional)",
         "Improved user experience with clearer progress indicators"
+      ]
+    },
+    {
+      "timestamp": "2026-03-31 15:13:47",
+      "old_version": "V0.78",
+      "new_version": "V0.79",
+      "change_type": "Feature Enhancement",
+      "description": "Added Edit Deployment submenu",
+      "changes": [
+        "New 'Edit Deployment' option in Deployment management",
+        "Direct edit using kubectl edit",
+        "Edit via external YAML file with kubectl apply"
       ]
     }
   ]

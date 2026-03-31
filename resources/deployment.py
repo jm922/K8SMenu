@@ -333,6 +333,97 @@ def export_deployment_menu():
         else:
             cprint(Color.RED, t("invalid_option"))
 
+# ---------- Edit Deployment Functions ----------
+def edit_deployment_direct():
+    """Edit Deployment directly using kubectl edit"""
+    print("\n" + t("edit_deployment_direct_title"))
+    numbered_list, dep_map, _ = get_deployment_list_with_numbers()
+    if numbered_list is None or not numbered_list:
+        cprint(Color.YELLOW, t("list_deployments_no_deployments"))
+        input(t("press_enter"))
+        return
+    
+    print(f"\n{Color.BOLD}{Color.CYAN}Available Deployments:{Color.END}")
+    for idx, name, data in numbered_list:
+        print(f"  {Color.GREEN}{idx}{Color.END}. {name} (Ready: {data['ready']})")
+    
+    identifier = input_required("describe_deployment_name")
+    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    if not dep_name:
+        cprint(Color.RED, t("export_not_found", name=identifier))
+        input(t("press_enter"))
+        return
+    
+    cprint(Color.BLUE, t("edit_deployment_direct_start", name=dep_name))
+    result = subprocess.run(['kubectl', 'edit', 'deployment', dep_name])
+    if result.returncode == 0:
+        cprint(Color.GREEN, t("edit_deployment_direct_success"))
+    else:
+        cprint(Color.RED, t("edit_deployment_direct_fail"))
+    input(t("press_enter"))
+
+def edit_deployment_yaml():
+    """Edit Deployment by providing YAML file path"""
+    print("\n" + t("edit_deployment_yaml_title"))
+    numbered_list, dep_map, _ = get_deployment_list_with_numbers()
+    if numbered_list is None or not numbered_list:
+        cprint(Color.YELLOW, t("list_deployments_no_deployments"))
+        input(t("press_enter"))
+        return
+    
+    print(f"\n{Color.BOLD}{Color.CYAN}Available Deployments:{Color.END}")
+    for idx, name, data in numbered_list:
+        print(f"  {Color.GREEN}{idx}{Color.END}. {name} (Ready: {data['ready']})")
+    
+    identifier = input_required("describe_deployment_name")
+    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    if not dep_name:
+        cprint(Color.RED, t("export_not_found", name=identifier))
+        input(t("press_enter"))
+        return
+    
+    yaml_path = input(t("edit_deployment_yaml_path_prompt")).strip()
+    if not yaml_path:
+        cprint(Color.RED, t("edit_deployment_yaml_path_empty"))
+        input(t("press_enter"))
+        return
+    
+    if not os.path.exists(yaml_path):
+        cprint(Color.RED, t("edit_deployment_yaml_not_found", path=yaml_path))
+        input(t("press_enter"))
+        return
+    
+    if input_yes_no_text(t("edit_deployment_yaml_edit_before"), default=True):
+        cprint(Color.BLUE, t("edit_deployment_yaml_open_editor"))
+        edit_yaml_with_vim(yaml_path)
+    
+    cprint(Color.BLUE, t("edit_deployment_yaml_applying"))
+    result = subprocess.run(['kubectl', 'apply', '-f', yaml_path], capture_output=True, text=True)
+    if result.returncode == 0:
+        cprint(Color.GREEN, t("edit_deployment_yaml_success"))
+        print(result.stdout)
+    else:
+        cprint(Color.RED, t("edit_deployment_yaml_fail"))
+        print(result.stderr)
+    input(t("press_enter"))
+
+def edit_deployment_menu():
+    """Submenu for editing Deployment"""
+    while True:
+        print("\n" + t("edit_deployment_menu_title"))
+        print(t("edit_deployment_menu_1"))
+        print(t("edit_deployment_menu_2"))
+        print(t("edit_deployment_menu_3"))
+        choice = input(t("edit_deployment_menu_prompt")).strip()
+        if choice == '1':
+            edit_deployment_direct()
+        elif choice == '2':
+            edit_deployment_yaml()
+        elif choice == '3':
+            break
+        else:
+            cprint(Color.RED, t("invalid_option"))
+
 def create_deployment_menu():
     while True:
         print("\n" + t("create_deployment_submenu_title"))
@@ -358,6 +449,7 @@ def deployment_menu():
         print(t("deployment_menu_4"))
         print(t("deployment_menu_5"))
         print(t("deployment_menu_6"))
+        print(t("deployment_menu_7"))
         choice = input(t("deployment_menu_prompt")).strip()
         if choice == '1':
             create_deployment_menu()
@@ -370,6 +462,8 @@ def deployment_menu():
         elif choice == '5':
             export_deployment_menu()
         elif choice == '6':
+            edit_deployment_menu()
+        elif choice == '7':
             break
         else:
             cprint(Color.RED, t("invalid_option"))

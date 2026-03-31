@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from utils.color import cprint, Color
 
-VERSION = "V0.78"
+VERSION = "V0.79"
 
 VERSION_CHANGES = {
     "V0.10": {
@@ -157,6 +157,15 @@ VERSION_CHANGES = {
             "Added 5-second delays between critical steps for better readability",
             "Upgrade now automatically deletes UPGRADE_TMP directory after success (optional)",
             "Improved user experience with clearer progress indicators"
+        ]
+    },
+    "V0.79": {
+        "type": "Feature Enhancement",
+        "description": "Added Edit Deployment submenu",
+        "changes": [
+            "New 'Edit Deployment' option in Deployment management",
+            "Direct edit using kubectl edit",
+            "Edit via external YAML file with kubectl apply"
         ]
     }
 }

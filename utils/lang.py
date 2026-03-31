@@ -115,15 +115,16 @@ LANG = {
     "describe_pod_fetch": "Fetching details for Pod '{name}'...",
     "describe_pod_fail": "Failed to describe Pod",
     
-    # Deployment submenu
+    # Deployment submenu (updated with Edit)
     "deployment_menu_title": f"{Color.CYAN}--- Deployment Management ---{Color.END}",
     "deployment_menu_1": "1. Create Deployment",
     "deployment_menu_2": "2. Delete Deployment",
     "deployment_menu_3": "3. List all Deployments",
     "deployment_menu_4": "4. Describe Deployment",
     "deployment_menu_5": "5. Export Deployment to YAML",
-    "deployment_menu_6": "6. Back to Main Menu",
-    "deployment_menu_prompt": "Choose (1-6): ",
+    "deployment_menu_6": "6. Edit Deployment",
+    "deployment_menu_7": "7. Back to Main Menu",
+    "deployment_menu_prompt": "Choose (1-7): ",
     
     # Export Deployment submenu
     "export_deployment_menu_title": f"{Color.CYAN}--- Export Deployment to YAML ---{Color.END}",
@@ -139,6 +140,30 @@ LANG = {
     "export_save_cancelled": "Save cancelled.",
     "export_fail": "❌ Failed to export Deployment: {error}",
     "export_not_found": "Deployment not found: {name}",
+    
+    # Edit Deployment submenu
+    "edit_deployment_menu_title": f"{Color.CYAN}--- Edit Deployment ---{Color.END}",
+    "edit_deployment_menu_1": "1. Direct Edit (kubectl edit)",
+    "edit_deployment_menu_2": "2. Edit via YAML file",
+    "edit_deployment_menu_3": "3. Back to Deployment Management",
+    "edit_deployment_menu_prompt": "Choose (1-3): ",
+    
+    # Direct edit
+    "edit_deployment_direct_title": f"{Color.CYAN}--- Direct Edit ---{Color.END}",
+    "edit_deployment_direct_start": "Opening editor for Deployment '{name}'...",
+    "edit_deployment_direct_success": "✅ Deployment updated successfully.",
+    "edit_deployment_direct_fail": "❌ Failed to update Deployment. See errors above.",
+    
+    # YAML file edit
+    "edit_deployment_yaml_title": f"{Color.CYAN}--- Edit via YAML File ---{Color.END}",
+    "edit_deployment_yaml_path_prompt": "Enter absolute path to YAML file: ",
+    "edit_deployment_yaml_path_empty": "❌ Path cannot be empty.",
+    "edit_deployment_yaml_not_found": "❌ File not found: {path}",
+    "edit_deployment_yaml_edit_before": "Do you want to edit the YAML file before applying?",
+    "edit_deployment_yaml_open_editor": "Opening editor...",
+    "edit_deployment_yaml_applying": "Applying YAML file...",
+    "edit_deployment_yaml_success": "✅ Deployment updated successfully.",
+    "edit_deployment_yaml_fail": "❌ Failed to update Deployment.",
     
     # Create Deployment submenu
     "create_deployment_submenu_title": f"{Color.CYAN}--- Create Deployment Options ---{Color.END}",
