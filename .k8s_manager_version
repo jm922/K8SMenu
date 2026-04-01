@@ -1,5 +1,5 @@
 {
-  "current_version": "V0.79",
+  "current_version": "V0.80",
   "history": [
     {
       "timestamp": "2026-03-30 18:42:46",
@@ -60,6 +60,19 @@
         "New 'Edit Deployment' option in Deployment management",
         "Direct edit using kubectl edit",
         "Edit via external YAML file with kubectl apply"
+      ]
+    },
+    {
+      "timestamp": "2026-04-01 12:06:07",
+      "old_version": "V0.79",
+      "new_version": "V0.80",
+      "change_type": "Feature Enhancement",
+      "description": "Improved Deployment list and edit display",
+      "changes": [
+        "Deployment list now shows container image column",
+        "Direct edit now displays detailed deployment info (name, ready, available, image)",
+        "Added exit option (q/menu) in Direct Edit to avoid mandatory selection",
+        "Better user experience for selecting deployments to edit"
       ]
     }
   ]

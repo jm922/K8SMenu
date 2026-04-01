@@ -2,8 +2,7 @@
 """
 Program upgrade tool - upgrades .py files from UPGRADE_TMP directory
 with automatic rollback and post-upgrade health check.
-Supports flat UPGRADE_TMP directory: finds target files by name recursively,
-excluding the UPGRADE_TMP directory itself.
+Supports flat UPGRADE_TMP directory: finds target files by name recursively.
 """
 
 import os
@@ -269,16 +268,23 @@ def program_upgrade():
             except:
                 pass
     
-    if input_yes_no_text("Do you want to delete the UPGRADE_TMP directory?", default=True):
+    # 询问是否清空 UPGRADE_TMP 目录（保留目录本身）
+    if input_yes_no_text("Do you want to clear the UPGRADE_TMP directory (keep the directory itself)?", default=True):
         try:
-            shutil.rmtree(upgrade_dir)
-            write_log(log_file, f"Deleted UPGRADE_TMP directory")
-            cprint(Color.GREEN, "✅ UPGRADE_TMP directory deleted.")
+            # 遍历删除目录内所有文件和子目录
+            for item in os.listdir(upgrade_dir):
+                item_path = os.path.join(upgrade_dir, item)
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    os.unlink(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+            write_log(log_file, f"Cleared contents of UPGRADE_TMP directory: {upgrade_dir}")
+            cprint(Color.GREEN, "✅ UPGRADE_TMP directory cleared (directory kept).")
         except Exception as e:
-            write_log(log_file, f"Failed to delete UPGRADE_TMP: {e}", "WARNING")
-            cprint(Color.YELLOW, f"⚠️ Could not delete UPGRADE_TMP: {e}")
+            write_log(log_file, f"Failed to clear UPGRADE_TMP directory: {e}", "WARNING")
+            cprint(Color.YELLOW, f"⚠️ Could not clear UPGRADE_TMP directory: {e}")
     else:
-        cprint(Color.YELLOW, "UPGRADE_TMP directory kept.")
+        cprint(Color.YELLOW, "UPGRADE_TMP directory kept as is.")
     
     if input_yes_no_text("\nDo you want to restart the program now?", default=True):
         cprint(Color.BLUE, "Restarting...")
