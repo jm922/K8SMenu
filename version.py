@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from utils.color import cprint, Color
 
-VERSION = "V0.80"
+VERSION = "V0.81"
 
 VERSION_CHANGES = {
     "V0.10": {
@@ -176,6 +176,15 @@ VERSION_CHANGES = {
             "Direct edit now displays detailed deployment info (name, ready, available, image)",
             "Added exit option (q/menu) in Direct Edit to avoid mandatory selection",
             "Better user experience for selecting deployments to edit"
+        ]
+    },
+    "V0.81": {
+        "type": "Feature Enhancement",
+        "description": "Enhanced Deployment list and edit with rollout status",
+        "changes": [
+            "Deployment list now shows ReplicaSet and Pod information",
+            "After editing, automatic rollout status check with progress output",
+            "Improved column layout for better readability"
         ]
     }
 }

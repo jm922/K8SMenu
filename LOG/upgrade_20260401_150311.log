@@ -1,0 +1,12 @@
+[2026-04-01 15:03:11] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-04-01 15:03:11] [INFO] Found 1 .py file(s) to process.
+[2026-04-01 15:03:18] [INFO] Backed up /home/jun/k8s_manager/main.py -> /home/jun/k8s_manager/main.py.bak
+[2026-04-01 15:03:20] [INFO] Original permissions: 0o100664
+[2026-04-01 15:03:20] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/main.py -> /home/jun/k8s_manager/main.py
+[2026-04-01 15:03:22] [INFO] Restored permissions to 0o100664
+[2026-04-01 15:03:29] [INFO] Starting post-upgrade health check...
+[2026-04-01 15:03:29] [INFO] Performing post-upgrade health check...
+[2026-04-01 15:03:34] [INFO] Health check succeeded.
+[2026-04-01 15:03:34] [INFO] Health check passed. Upgrade successful.
+[2026-04-01 15:03:34] [INFO] Removed backup /home/jun/k8s_manager/main.py.bak
+[2026-04-01 15:03:54] [INFO] Cleared contents of UPGRADE_TMP directory: /home/jun/k8s_manager/UPGRADE_TMP

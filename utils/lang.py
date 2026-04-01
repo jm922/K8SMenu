@@ -109,7 +109,7 @@ LANG = {
     "describe_pod_fetch": "Fetching details for Pod '{name}'...",
     "describe_pod_fail": "Failed to describe Pod",
     
-    # Deployment submenu (updated with Edit)
+    # Deployment submenu
     "deployment_menu_title": f"{Color.CYAN}--- Deployment Management ---{Color.END}",
     "deployment_menu_1": "1. Create Deployment",
     "deployment_menu_2": "2. Delete Deployment",
@@ -193,7 +193,7 @@ LANG = {
     "delete_deployment_no_pods": "No Deployments available to delete.",
     "delete_deployment_summary": "Deletion Summary:",
     
-    # List Deployments - Updated header to include Image column
+    # List Deployments - title only (table headers are hardcoded in deployment.py)
     "list_deployments_title": f"{Color.CYAN}--- Current Deployment List ---{Color.END}",
     "list_deployments_fail": "Failed to list Deployments",
     "list_deployments_no_deployments": "No Deployments in current namespace.",

@@ -15,6 +15,41 @@ from tools.upgrade import program_upgrade
 from tools.github_upload import upload_to_github_git
 from maintenance.cluster import cluster_maintenance
 
+def display_license():
+    """Display open source license and disclaimer"""
+    print("\n" + "="*60)
+    cprint(Color.CYAN, "Kubernetes Resource Manager")
+    cprint(Color.BLUE, "Developed by DeepSeek AI")
+    print("="*60)
+    print("""
+This software is open source and licensed under the MIT License.
+You are encouraged to modify, enhance, and share your improvements.
+
+Disclaimer:
+- This tool is provided \"AS IS\", without warranty of any kind.
+- The author assumes no responsibility or liability for any damages
+  arising from the use of this software.
+- Use in production environments is at your own risk.
+- Always test thoroughly in non-production environments first.
+
+Source code is available on GitHub:
+  https://github.com/jm922/K8SMenu
+
+By using this software, you acknowledge and accept these terms.
+    """)
+    print("="*60)
+    
+    while True:
+        choice = input("Do you agree to the terms and wish to continue? (y/n): ").strip().lower()
+        if choice == 'y':
+            cprint(Color.GREEN, "Thank you. Starting the program...\n")
+            return True
+        elif choice == 'n' or choice == '':
+            cprint(Color.YELLOW, "You did not accept the terms. Exiting.")
+            return False
+        else:
+            cprint(Color.RED, "Invalid input. Please enter 'y' or 'n'.")
+
 def service_menu():
     print("\n" + t("service_menu_title"))
     cprint(Color.YELLOW, t("service_menu_dev"))
@@ -35,9 +70,8 @@ def manager_system_tools():
         print("\n" + t("tools_menu_title"))
         print(t("tools_menu_1"))
         print(t("tools_menu_2"))
-        # 原选项3 (PyGithub) 已移除，Git CLI 成为选项3
         print(t("tools_menu_3"))
-        print(t("tools_menu_4"))   # 返回主菜单
+        print(t("tools_menu_4"))
         choice = input(t("tools_menu_prompt")).strip()
         if choice == '1':
             program_upgrade()
@@ -86,6 +120,10 @@ def main_menu():
             cprint(Color.RED, t("invalid_option"))
 
 if __name__ == "__main__":
+    # Show license and get agreement
+    if not display_license():
+        sys.exit(0)
+    
     check_kubectl()
     init_version_log()
     main_menu()
