@@ -115,7 +115,59 @@ LANG = {
     "describe_pod_fetch": "Fetching details for Pod '{name}'...",
     "describe_pod_fail": "Failed to describe Pod",
     
-    # Deployment submenu (updated)
+    # Service submenu
+    "service_menu_title": f"{Color.CYAN}--- Service Management ---{Color.END}",
+    "service_menu_1": "1. Create Service",
+    "service_menu_2": "2. Delete Service",
+    "service_menu_3": "3. List all Services",
+    "service_menu_4": "4. Describe Service",
+    "service_menu_5": "5. Back to Main Menu",
+    "service_menu_prompt": "Choose (1-5): ",
+    
+    # Create Service submenu
+    "create_service_submenu_title": f"{Color.CYAN}--- Create Service Options ---{Color.END}",
+    "create_service_submenu_1": "1. Quick Deploy (from Deployment)",
+    "create_service_submenu_2": "2. Create YAML (Edit YAML file manually)",
+    "create_service_submenu_3": "3. Back to Service Management",
+    "create_service_submenu_prompt": "Choose (1-3): ",
+    
+    # Quick deploy
+    "create_service_quick_title": f"{Color.CYAN}--- Quick Create Service from Deployment ---{Color.END}",
+    "create_service_select_deployment": "Select Deployment number or name: ",
+    "create_service_name": "Service name",
+    "create_service_type": "Service type (ClusterIP/NodePort/LoadBalancer)",
+    "create_service_port": "Service port",
+    "create_service_target_port": "Target port (container port)",
+    
+    # YAML editor
+    "create_service_yaml_title": f"{Color.CYAN}--- Create Service via YAML ---{Color.END}",
+    
+    # Delete Service
+    "delete_service_title": f"{Color.CYAN}--- Delete Service ---{Color.END}",
+    "delete_service_name": "Service name or number to delete",
+    "delete_service_hint": "Enter numbers separated by space (e.g., '1 3 5'), 'q' to quit, 'menu' to return, or Service name",
+    "delete_service_invalid": "Invalid number or Service name, please try again.",
+    "delete_service_not_found": "Service with number {num} not found, please try again.",
+    "delete_service_confirm_single": "Confirm deletion of Service '{name}'?",
+    "delete_service_confirm_multiple": "Confirm deletion of {count} Services?",
+    "delete_service_success": "✅ Service '{name}' deleted successfully.",
+    "delete_service_fail": "❌ Failed to delete service '{name}': {error}",
+    "delete_service_no_services": "No Services available to delete.",
+    "delete_service_summary": "Deletion Summary:",
+    
+    # List Services
+    "list_services_title": f"{Color.CYAN}--- Current Service List ---{Color.END}",
+    "list_services_fail": "Failed to list Services",
+    "list_services_no_services": "No Services in current namespace.",
+    
+    # Describe Service
+    "describe_service_title": f"{Color.CYAN}--- Describe Service ---{Color.END}",
+    "describe_service_name": "Service name or number to describe",
+    "describe_service_hint": "Enter number (e.g., 1) or Service name",
+    "describe_service_fetch": "Fetching details for Service '{name}'...",
+    "describe_service_fail": "Failed to describe Service",
+    
+    # Deployment submenu
     "deployment_menu_title": f"{Color.CYAN}--- Deployment Management ---{Color.END}",
     "deployment_menu_1": "1. Create Deployment",
     "deployment_menu_2": "2. Delete Deployment",

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deployment management functions - enhanced with show pods integration (current namespace only)
+Deployment management functions - with labels column in list
 """
 
 import subprocess
@@ -17,30 +17,81 @@ from resources.common import (get_deployment_list_with_numbers, resolve_deployme
                               get_deployment_replicaset_pod_info)
 
 def list_deployments_with_numbers():
-    """Display numbered list of Deployments (without Pods column)"""
+    """Display numbered list of Deployments with Labels column"""
     print("\n" + t("list_deployments_title"))
-    numbered_list, _, output = get_deployment_list_with_numbers()
-    if numbered_list is None:
-        cprint(Color.RED, t("fail") + " " + t("list_deployments_fail") + ": " + output)
+    # Use -o wide for basic info
+    result = subprocess.run(['kubectl', 'get', 'deployments', '-o', 'wide'], capture_output=True, text=True)
+    if result.returncode != 0:
+        cprint(Color.RED, t("fail") + " " + t("list_deployments_fail") + ": " + result.stderr)
         return None
-    if not numbered_list:
+    
+    # Get labels via JSON
+    json_result = subprocess.run(['kubectl', 'get', 'deployments', '-o', 'json'], capture_output=True, text=True)
+    labels_map = {}
+    if json_result.returncode == 0:
+        try:
+            data = json.loads(json_result.stdout)
+            for item in data.get('items', []):
+                name = item['metadata']['name']
+                labels = item['metadata'].get('labels', {})
+                labels_str = ','.join([f"{k}={v}" for k, v in labels.items()])
+                labels_map[name] = labels_str
+        except:
+            pass
+    
+    lines = result.stdout.strip().split('\n')
+    if len(lines) <= 1:
         cprint(Color.YELLOW, t("list_deployments_no_deployments"))
         return None
-    print(f"{Color.BOLD}{Color.CYAN}{'#':<4} {'Name':<30} {'Ready':<8} {'Up-to-date':<10} {'Available':<10} {'Age':<8} {'Image':<40}{Color.END}")
-    print("-" * 120)
-    for idx, name, data in numbered_list:
-        image = data.get('images', 'N/A')
+    
+    dep_data = []
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) >= 5:
+            name = parts[0]
+            ready = parts[1] if len(parts) > 1 else ''
+            up_to_date = parts[2] if len(parts) > 2 else ''
+            available = parts[3] if len(parts) > 3 else ''
+            age = parts[4] if len(parts) > 4 else ''
+            images = parts[6] if len(parts) > 6 else ''
+            labels = labels_map.get(name, '')
+            dep_data.append({
+                'name': name,
+                'ready': ready,
+                'up_to_date': up_to_date,
+                'available': available,
+                'age': age,
+                'images': images,
+                'labels': labels
+            })
+    
+    print(f"{Color.BOLD}{Color.CYAN}{'#':<4} {'Name':<30} {'Ready':<8} {'Up-to-date':<10} {'Available':<10} {'Age':<8} {'Image':<40} {'Labels':<30}{Color.END}")
+    print("-" * 150)
+    for idx, data in enumerate(dep_data, 1):
+        image = data['images']
         if len(image) > 40:
             image = image[:37] + '...'
-        print(f"{Color.GREEN}{idx:<4}{Color.END} {data['name']:<30} {data['ready']:<8} {data['up_to_date']:<10} {data['available']:<10} {data['age']:<8} {image:<40}")
-    return numbered_list
+        labels = data['labels']
+        if len(labels) > 30:
+            labels = labels[:27] + '...'
+        print(f"{Color.GREEN}{idx:<4}{Color.END} {data['name']:<30} {data['ready']:<8} {data['up_to_date']:<10} {data['available']:<10} {data['age']:<8} {image:<40} {labels:<30}")
+    
+    numbered_list = [(idx, d['name'], d) for idx, d in enumerate(dep_data, 1)]
+    dep_map = {str(idx): d['name'] for idx, d in enumerate(dep_data, 1)}
+    dep_map.update({d['name']: d['name'] for d in dep_data})
+    return numbered_list, dep_map
 
 def show_deployment_pods(dep_name=None):
     """Show Pods belonging to a specific Deployment (current namespace, with Restarts column)"""
     if dep_name is None:
         print("\n" + t("show_deployment_pods_title"))
-        numbered_list, dep_map, _ = get_deployment_list_with_numbers()
-        if numbered_list is None or not numbered_list:
+        result = list_deployments_with_numbers()
+        if result is None:
+            return
+        numbered_list, dep_map = result
+        if not numbered_list:
             cprint(Color.YELLOW, t("list_deployments_no_deployments"))
             input(t("press_enter"))
             return
@@ -72,7 +123,6 @@ def show_deployment_pods(dep_name=None):
     except:
         label_selector = f"app={dep_name}"
     
-    # Get pods in current namespace with the selector
     cmd = ['kubectl', 'get', 'pods', '-l', label_selector, '-o', 'wide', '--show-labels']
     pod_result = subprocess.run(cmd, capture_output=True, text=True)
     if pod_result.returncode != 0:
@@ -106,7 +156,10 @@ def show_deployment_pods(dep_name=None):
 
 def list_deployments():
     """List all Deployments, then optionally show Pods of a selected Deployment"""
-    numbered_list = list_deployments_with_numbers()
+    result = list_deployments_with_numbers()
+    if result is None:
+        return
+    numbered_list, dep_map = result
     if not numbered_list:
         return
     
@@ -115,10 +168,6 @@ def list_deployments():
         identifier = input("").strip().lower()
         if identifier in ['q', 'quit']:
             return
-        dep_map = {}
-        for idx, name, _ in numbered_list:
-            dep_map[str(idx)] = name
-            dep_map[name] = name
         dep_name = resolve_deployment_identifier(identifier, dep_map)
         if dep_name:
             show_deployment_pods(dep_name)
@@ -126,6 +175,7 @@ def list_deployments():
             cprint(Color.RED, t("export_not_found", name=identifier))
     input("\nPress Enter to continue...")
 
+# ---------- The following functions are unchanged from the previous version ----------
 def quick_deploy_deployment():
     print("\n" + t("create_deployment_title"))
     name = input_required("create_deployment_name")

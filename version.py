@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from utils.color import cprint, Color
 
-VERSION = "V0.83"
+VERSION = "V0.84"
 
 VERSION_CHANGES = {
     "V0.10": {
@@ -204,6 +204,15 @@ VERSION_CHANGES = {
             "Now uses --all-namespaces to fetch pods, so Namespace column shows actual pod namespace",
             "Improved Pod list display with correct namespace information",
             "Show Deployment Pods now also correctly shows namespace"
+        ]
+    },
+    "V0.84": {
+        "type": "Feature Enhancement",
+        "description": "Added Service management and Deployment labels",
+        "changes": [
+            "Deployment list now displays labels column",
+            "Complete Service management: create (quick from Deployment or YAML), delete, list, describe",
+            "Service creation can select existing Deployment to auto-generate selector"
         ]
     }
 }
