@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-Deployment management functions
+Deployment management functions - enhanced with show pods integration (current namespace only)
 """
 
 import subprocess
 import os
 import json
-import time
 from datetime import datetime
 from utils.color import cprint, Color
 from utils.lang import t
@@ -18,35 +17,114 @@ from resources.common import (get_deployment_list_with_numbers, resolve_deployme
                               get_deployment_replicaset_pod_info)
 
 def list_deployments_with_numbers():
-    """Display numbered list of Deployments with ReplicaSet and Pod info"""
+    """Display numbered list of Deployments (without Pods column)"""
     print("\n" + t("list_deployments_title"))
     numbered_list, _, output = get_deployment_list_with_numbers()
     if numbered_list is None:
         cprint(Color.RED, t("fail") + " " + t("list_deployments_fail") + ": " + output)
-        return
+        return None
     if not numbered_list:
         cprint(Color.YELLOW, t("list_deployments_no_deployments"))
-        return
-    extra_info = get_deployment_replicaset_pod_info()
-    # Header: #, Name, Ready, Up-to-date, Available, Age, Image, ReplicaSet, Pods
-    print(f"{Color.BOLD}{Color.CYAN}{'#':<4} {'Name':<25} {'Ready':<8} {'Up-to-date':<10} {'Available':<10} {'Age':<8} {'Image':<35} {'ReplicaSet':<35} {'Pods':<30}{Color.END}")
-    print("-" * 170)
+        return None
+    print(f"{Color.BOLD}{Color.CYAN}{'#':<4} {'Name':<30} {'Ready':<8} {'Up-to-date':<10} {'Available':<10} {'Age':<8} {'Image':<40}{Color.END}")
+    print("-" * 120)
     for idx, name, data in numbered_list:
-        info = extra_info.get(name, {})
-        # Image (from kubectl get -o wide)
         image = data.get('images', 'N/A')
-        if len(image) > 35:
-            image = image[:32] + '...'
-        # ReplicaSet name
-        rs_name = info.get('replicaset', 'N/A')
-        if len(rs_name) > 35:
-            rs_name = rs_name[:32] + '...'
-        # Pods info
-        pods_info = info.get('pod_names', 'N/A')
-        if len(pods_info) > 30:
-            pods_info = pods_info[:27] + '...'
-        print(f"{Color.GREEN}{idx:<4}{Color.END} {data['name']:<25} {data['ready']:<8} {data['up_to_date']:<10} {data['available']:<10} {data['age']:<8} {image:<35} {rs_name:<35} {pods_info:<30}")
+        if len(image) > 40:
+            image = image[:37] + '...'
+        print(f"{Color.GREEN}{idx:<4}{Color.END} {data['name']:<30} {data['ready']:<8} {data['up_to_date']:<10} {data['available']:<10} {data['age']:<8} {image:<40}")
     return numbered_list
+
+def show_deployment_pods(dep_name=None):
+    """Show Pods belonging to a specific Deployment (current namespace, with Restarts column)"""
+    if dep_name is None:
+        print("\n" + t("show_deployment_pods_title"))
+        numbered_list, dep_map, _ = get_deployment_list_with_numbers()
+        if numbered_list is None or not numbered_list:
+            cprint(Color.YELLOW, t("list_deployments_no_deployments"))
+            input(t("press_enter"))
+            return
+        
+        print(f"\n{Color.BOLD}{Color.CYAN}Available Deployments:{Color.END}")
+        for idx, name, data in numbered_list:
+            print(f"  {Color.GREEN}{idx}{Color.END}. {name} (Ready: {data['ready']})")
+        
+        identifier = input_required("describe_deployment_name")
+        dep_name = resolve_deployment_identifier(identifier, dep_map)
+        if not dep_name:
+            cprint(Color.RED, t("export_not_found", name=identifier))
+            input(t("press_enter"))
+            return
+    
+    # Get deployment's selector labels
+    result = subprocess.run(['kubectl', 'get', 'deployment', dep_name, '-o', 'json'], capture_output=True, text=True)
+    if result.returncode != 0:
+        cprint(Color.RED, t("show_deployment_pods_fail", error=result.stderr))
+        input(t("press_enter"))
+        return
+    
+    try:
+        dep_json = json.loads(result.stdout)
+        selector = dep_json.get('spec', {}).get('selector', {}).get('matchLabels', {})
+        if not selector:
+            selector = {'app': dep_name}
+        label_selector = ','.join([f"{k}={v}" for k, v in selector.items()])
+    except:
+        label_selector = f"app={dep_name}"
+    
+    # Get pods in current namespace with the selector
+    cmd = ['kubectl', 'get', 'pods', '-l', label_selector, '-o', 'wide', '--show-labels']
+    pod_result = subprocess.run(cmd, capture_output=True, text=True)
+    if pod_result.returncode != 0:
+        cprint(Color.RED, t("show_deployment_pods_fail", error=pod_result.stderr))
+        input(t("press_enter"))
+        return
+    
+    print(f"\n{Color.BOLD}{Color.CYAN}Pods for Deployment '{dep_name}' (selector: {label_selector}):{Color.END}")
+    lines = pod_result.stdout.strip().split('\n')
+    if len(lines) <= 1:
+        cprint(Color.YELLOW, "No pods found.")
+    else:
+        print(f"{Color.BOLD}{Color.CYAN}{'Pod Name':<30} {'Ready':<8} {'Restarts':<10} {'Status':<12} {'IP':<16} {'Node':<20} {'Labels':<30}{Color.END}")
+        print("-" * 135)
+        for line in lines[1:]:
+            if not line.strip():
+                continue
+            parts = line.split()
+            if len(parts) >= 8:
+                name = parts[0]
+                ready = parts[1]
+                status = parts[2]
+                restarts = parts[3]
+                ip = parts[5] if len(parts) > 5 else ''
+                node = parts[6] if len(parts) > 6 else ''
+                labels = parts[-1] if len(parts) > 7 else ''
+                if len(labels) > 30:
+                    labels = labels[:27] + '...'
+                print(f"{name:<30} {ready:<8} {restarts:<10} {status:<12} {ip:<16} {node:<20} {labels:<30}")
+    input(t("press_enter"))
+
+def list_deployments():
+    """List all Deployments, then optionally show Pods of a selected Deployment"""
+    numbered_list = list_deployments_with_numbers()
+    if not numbered_list:
+        return
+    
+    if input_yes_no_text(t("list_deployments_ask_show_pods"), default=False):
+        print(t("list_deployments_select_pods"))
+        identifier = input("").strip().lower()
+        if identifier in ['q', 'quit']:
+            return
+        dep_map = {}
+        for idx, name, _ in numbered_list:
+            dep_map[str(idx)] = name
+            dep_map[name] = name
+        dep_name = resolve_deployment_identifier(identifier, dep_map)
+        if dep_name:
+            show_deployment_pods(dep_name)
+        else:
+            cprint(Color.RED, t("export_not_found", name=identifier))
+    input("\nPress Enter to continue...")
 
 def quick_deploy_deployment():
     print("\n" + t("create_deployment_title"))
@@ -235,10 +313,6 @@ def delete_deployment():
             if not input_yes_no_text(t("delete_try_again"), default=True):
                 return
 
-def list_deployments():
-    list_deployments_with_numbers()
-    input("\nPress Enter to continue...")
-
 def describe_deployment():
     print("\n" + t("describe_deployment_title"))
     numbered_list, dep_map, _ = get_deployment_list_with_numbers()
@@ -344,7 +418,6 @@ def export_deployment_menu():
 
 # ---------- Edit Deployment Functions ----------
 def edit_deployment_direct():
-    """Edit Deployment directly using kubectl edit, then wait for rollout status"""
     while True:
         print("\n" + t("edit_deployment_direct_title"))
         numbered_list, dep_map, _ = get_deployment_list_with_numbers()
@@ -353,14 +426,13 @@ def edit_deployment_direct():
             input(t("press_enter"))
             return
         
-        # Enhanced display
-        print(f"\n{Color.BOLD}{Color.CYAN}{'#':<4} {'Name':<25} {'Ready':<8} {'Available':<10} {'Image':<40}{Color.END}")
+        print(f"\n{Color.BOLD}{Color.CYAN}{'#':<4} {'Name':<30} {'Ready':<8} {'Available':<10} {'Image':<40}{Color.END}")
         print("-" * 100)
         for idx, name, data in numbered_list:
             image = data.get('images', 'N/A')
             if len(image) > 40:
                 image = image[:37] + '...'
-            print(f"{Color.GREEN}{idx:<4}{Color.END} {data['name']:<25} {data['ready']:<8} {data['available']:<10} {image:<40}")
+            print(f"{Color.GREEN}{idx:<4}{Color.END} {data['name']:<30} {data['ready']:<8} {data['available']:<10} {image:<40}")
         
         print(f"\n{Color.YELLOW}Enter 'q' to quit, 'menu' to return to Edit menu, or select a Deployment number/name.{Color.END}")
         identifier = input(t("edit_deployment_direct_prompt")).strip().lower()
@@ -378,33 +450,15 @@ def edit_deployment_direct():
             continue
         
         cprint(Color.BLUE, t("edit_deployment_direct_start", name=dep_name))
-        edit_result = subprocess.run(['kubectl', 'edit', 'deployment', dep_name])
-        if edit_result.returncode != 0:
+        result = subprocess.run(['kubectl', 'edit', 'deployment', dep_name])
+        if result.returncode == 0:
+            cprint(Color.GREEN, t("edit_deployment_direct_success"))
+        else:
             cprint(Color.RED, t("edit_deployment_direct_fail"))
-            input(t("press_enter"))
-            return
-        
-        # Edit succeeded, now check rollout status
-        cprint(Color.BLUE, f"Waiting for rollout status of Deployment '{dep_name}'...")
-        try:
-            # Run rollout status with timeout (120 seconds)
-            rollout = subprocess.run(['kubectl', 'rollout', 'status', 'deployment', dep_name, '--timeout=120s'],
-                                      capture_output=True, text=True)
-            if rollout.returncode == 0:
-                cprint(Color.GREEN, t("edit_deployment_direct_success"))
-                # Print the rollout output (usually shows "deployment "xxx" successfully rolled out")
-                print(rollout.stdout)
-            else:
-                cprint(Color.RED, f"Rollout status check failed: {rollout.stderr}")
-                cprint(Color.RED, t("edit_deployment_direct_fail"))
-        except Exception as e:
-            cprint(Color.RED, f"Error checking rollout status: {e}")
-        
         input(t("press_enter"))
         return
 
 def edit_deployment_yaml():
-    """Edit Deployment by providing YAML file path"""
     print("\n" + t("edit_deployment_yaml_title"))
     numbered_list, dep_map, _ = get_deployment_list_with_numbers()
     if numbered_list is None or not numbered_list:
@@ -443,21 +497,12 @@ def edit_deployment_yaml():
     if result.returncode == 0:
         cprint(Color.GREEN, t("edit_deployment_yaml_success"))
         print(result.stdout)
-        # Also wait for rollout status
-        cprint(Color.BLUE, f"Waiting for rollout status of Deployment '{dep_name}'...")
-        rollout = subprocess.run(['kubectl', 'rollout', 'status', 'deployment', dep_name, '--timeout=120s'],
-                                  capture_output=True, text=True)
-        if rollout.returncode == 0:
-            print(rollout.stdout)
-        else:
-            cprint(Color.RED, f"Rollout status check failed: {rollout.stderr}")
     else:
         cprint(Color.RED, t("edit_deployment_yaml_fail"))
         print(result.stderr)
     input(t("press_enter"))
 
 def edit_deployment_menu():
-    """Submenu for editing Deployment"""
     while True:
         print("\n" + t("edit_deployment_menu_title"))
         print(t("edit_deployment_menu_1"))

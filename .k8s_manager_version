@@ -1,5 +1,5 @@
 {
-  "current_version": "V0.81",
+  "current_version": "V0.83",
   "history": [
     {
       "timestamp": "2026-03-30 18:42:46",
@@ -85,6 +85,30 @@
         "Deployment list now shows ReplicaSet and Pod information",
         "After editing, automatic rollout status check with progress output",
         "Improved column layout for better readability"
+      ]
+    },
+    {
+      "timestamp": "2026-04-02 13:34:14",
+      "old_version": "V0.81",
+      "new_version": "V0.82",
+      "change_type": "Improvement",
+      "description": "Integrated Show Pods into Deployment list",
+      "changes": [
+        "After listing Deployments, you can now optionally view Pods of a selected Deployment",
+        "Removed separate 'Show Pods of Deployment' menu option for cleaner interface",
+        "Pods display includes Namespace and Labels columns"
+      ]
+    },
+    {
+      "timestamp": "2026-04-02 13:52:22",
+      "old_version": "V0.82",
+      "new_version": "V0.83",
+      "change_type": "Bug Fix",
+      "description": "Fixed empty Namespace in Pod list",
+      "changes": [
+        "Now uses --all-namespaces to fetch pods, so Namespace column shows actual pod namespace",
+        "Improved Pod list display with correct namespace information",
+        "Show Deployment Pods now also correctly shows namespace"
       ]
     }
   ]

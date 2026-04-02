@@ -1,0 +1,27 @@
+[2026-04-02 13:33:09] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-04-02 13:33:09] [INFO] Found 4 .py file(s) to process.
+[2026-04-02 13:33:16] [INFO] Backed up /home/jun/k8s_manager/utils/lang.py -> /home/jun/k8s_manager/utils/lang.py.bak
+[2026-04-02 13:33:18] [INFO] Original permissions: 0o100664
+[2026-04-02 13:33:18] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/lang.py -> /home/jun/k8s_manager/utils/lang.py
+[2026-04-02 13:33:20] [INFO] Restored permissions to 0o100664
+[2026-04-02 13:33:24] [INFO] Backed up /home/jun/k8s_manager/resources/deployment.py -> /home/jun/k8s_manager/resources/deployment.py.bak
+[2026-04-02 13:33:26] [INFO] Original permissions: 0o100664
+[2026-04-02 13:33:26] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/deployment.py -> /home/jun/k8s_manager/resources/deployment.py
+[2026-04-02 13:33:28] [INFO] Restored permissions to 0o100664
+[2026-04-02 13:33:32] [INFO] Backed up /home/jun/k8s_manager/version.py -> /home/jun/k8s_manager/version.py.bak
+[2026-04-02 13:33:34] [INFO] Original permissions: 0o100664
+[2026-04-02 13:33:34] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/version.py -> /home/jun/k8s_manager/version.py
+[2026-04-02 13:33:36] [INFO] Restored permissions to 0o100664
+[2026-04-02 13:33:40] [INFO] Backed up /home/jun/k8s_manager/resources/pod.py -> /home/jun/k8s_manager/resources/pod.py.bak
+[2026-04-02 13:33:42] [INFO] Original permissions: 0o100664
+[2026-04-02 13:33:42] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/pod.py -> /home/jun/k8s_manager/resources/pod.py
+[2026-04-02 13:33:44] [INFO] Restored permissions to 0o100664
+[2026-04-02 13:33:51] [INFO] Starting post-upgrade health check...
+[2026-04-02 13:33:51] [INFO] Performing post-upgrade health check...
+[2026-04-02 13:33:56] [INFO] Health check succeeded.
+[2026-04-02 13:33:56] [INFO] Health check passed. Upgrade successful.
+[2026-04-02 13:33:56] [INFO] Removed backup /home/jun/k8s_manager/utils/lang.py.bak
+[2026-04-02 13:33:56] [INFO] Removed backup /home/jun/k8s_manager/resources/deployment.py.bak
+[2026-04-02 13:33:56] [INFO] Removed backup /home/jun/k8s_manager/version.py.bak
+[2026-04-02 13:33:56] [INFO] Removed backup /home/jun/k8s_manager/resources/pod.py.bak
+[2026-04-02 13:34:05] [INFO] Cleared contents of UPGRADE_TMP directory: /home/jun/k8s_manager/UPGRADE_TMP

@@ -1,0 +1,22 @@
+[2026-04-02 13:51:20] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-04-02 13:51:20] [INFO] Found 3 .py file(s) to process.
+[2026-04-02 13:51:27] [INFO] Backed up /home/jun/k8s_manager/resources/deployment.py -> /home/jun/k8s_manager/resources/deployment.py.bak
+[2026-04-02 13:51:29] [INFO] Original permissions: 0o100664
+[2026-04-02 13:51:29] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/deployment.py -> /home/jun/k8s_manager/resources/deployment.py
+[2026-04-02 13:51:31] [INFO] Restored permissions to 0o100664
+[2026-04-02 13:51:35] [INFO] Backed up /home/jun/k8s_manager/version.py -> /home/jun/k8s_manager/version.py.bak
+[2026-04-02 13:51:37] [INFO] Original permissions: 0o100664
+[2026-04-02 13:51:37] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/version.py -> /home/jun/k8s_manager/version.py
+[2026-04-02 13:51:39] [INFO] Restored permissions to 0o100664
+[2026-04-02 13:51:43] [INFO] Backed up /home/jun/k8s_manager/resources/pod.py -> /home/jun/k8s_manager/resources/pod.py.bak
+[2026-04-02 13:51:45] [INFO] Original permissions: 0o100664
+[2026-04-02 13:51:45] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/pod.py -> /home/jun/k8s_manager/resources/pod.py
+[2026-04-02 13:51:47] [INFO] Restored permissions to 0o100664
+[2026-04-02 13:51:54] [INFO] Starting post-upgrade health check...
+[2026-04-02 13:51:54] [INFO] Performing post-upgrade health check...
+[2026-04-02 13:51:59] [INFO] Health check succeeded.
+[2026-04-02 13:51:59] [INFO] Health check passed. Upgrade successful.
+[2026-04-02 13:51:59] [INFO] Removed backup /home/jun/k8s_manager/resources/deployment.py.bak
+[2026-04-02 13:51:59] [INFO] Removed backup /home/jun/k8s_manager/version.py.bak
+[2026-04-02 13:51:59] [INFO] Removed backup /home/jun/k8s_manager/resources/pod.py.bak
+[2026-04-02 13:52:05] [INFO] Cleared contents of UPGRADE_TMP directory: /home/jun/k8s_manager/UPGRADE_TMP

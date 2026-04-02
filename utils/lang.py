@@ -41,12 +41,14 @@ LANG = {
     "pod_menu_5": "5. Back to Main Menu",
     "pod_menu_prompt": "Choose (1-5): ",
     
+    # Create Pod submenu
     "create_pod_submenu_title": f"{Color.CYAN}--- Create Pod Options ---{Color.END}",
     "create_pod_submenu_1": "1. Quick Deploy (Interactive Wizard)",
     "create_pod_submenu_2": "2. Create YAML (Edit YAML file manually)",
     "create_pod_submenu_3": "3. Back to Pod Management",
     "create_pod_submenu_prompt": "Choose (1-3): ",
     
+    # Quick Deploy (Pod)
     "create_pod_title": f"{Color.CYAN}--- Create Pod (Quick Deploy) ---{Color.END}",
     "create_pod_name": "Pod name",
     "create_pod_image": "Image (e.g., nginx:latest)",
@@ -55,6 +57,7 @@ LANG = {
     "create_pod_env_key": "  Environment variable name",
     "create_pod_env_value": "  Environment variable value",
     
+    # Pod YAML Editor
     "yaml_editor_title": f"{Color.CYAN}--- Create Pod (YAML Editor) ---{Color.END}",
     "yaml_file_created": "YAML template created: {file}",
     "yaml_editor_check": "Checking for vim editor...",
@@ -80,6 +83,7 @@ LANG = {
     "yaml_file_saved": "YAML file saved at: {file}",
     "yaml_editor_aborted": "Pod creation cancelled.",
     
+    # Delete Pod
     "delete_pod_title": f"{Color.CYAN}--- Delete Pod ---{Color.END}",
     "delete_pod_name": "Pod name or number to delete",
     "delete_pod_hint": "Enter numbers separated by space (e.g., '1 3 5'), 'q' to quit, 'menu' to return, or Pod name",
@@ -99,17 +103,19 @@ LANG = {
     "delete_no_valid": "No valid Pods selected for deletion.",
     "delete_cancelled": "Deletion cancelled.",
     
+    # List Pods
     "list_pods_title": f"{Color.CYAN}--- Current Pod List ---{Color.END}",
     "list_pods_fail": "Failed to list Pods",
     "list_pods_no_pods": "No running Pods in current namespace.",
     
+    # Describe Pod
     "describe_pod_title": f"{Color.CYAN}--- Describe Pod ---{Color.END}",
     "describe_pod_name": "Pod name or number to describe",
     "describe_pod_hint": "Enter number (e.g., 1) or Pod name (e.g., nginx-pod)",
     "describe_pod_fetch": "Fetching details for Pod '{name}'...",
     "describe_pod_fail": "Failed to describe Pod",
     
-    # Deployment submenu
+    # Deployment submenu (updated)
     "deployment_menu_title": f"{Color.CYAN}--- Deployment Management ---{Color.END}",
     "deployment_menu_1": "1. Create Deployment",
     "deployment_menu_2": "2. Delete Deployment",
@@ -119,6 +125,15 @@ LANG = {
     "deployment_menu_6": "6. Edit Deployment",
     "deployment_menu_7": "7. Back to Main Menu",
     "deployment_menu_prompt": "Choose (1-7): ",
+    
+    # List deployments after-display prompt
+    "list_deployments_ask_show_pods": "Do you want to see Pods of a Deployment? [y/N]: ",
+    "list_deployments_select_pods": "Enter Deployment number or name to show Pods (or 'q' to quit): ",
+    
+    # Show Pods of Deployment
+    "show_deployment_pods_title": f"{Color.CYAN}--- Show Pods of Deployment ---{Color.END}",
+    "show_deployment_pods_fetching": "Fetching pods for Deployment '{name}'...",
+    "show_deployment_pods_fail": "❌ Failed to list pods: {error}",
     
     # Export Deployment submenu
     "export_deployment_menu_title": f"{Color.CYAN}--- Export Deployment to YAML ---{Color.END}",
@@ -193,7 +208,7 @@ LANG = {
     "delete_deployment_no_pods": "No Deployments available to delete.",
     "delete_deployment_summary": "Deletion Summary:",
     
-    # List Deployments - title only (table headers are hardcoded in deployment.py)
+    # List Deployments - header
     "list_deployments_title": f"{Color.CYAN}--- Current Deployment List ---{Color.END}",
     "list_deployments_fail": "Failed to list Deployments",
     "list_deployments_no_deployments": "No Deployments in current namespace.",

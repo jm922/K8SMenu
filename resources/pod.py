@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pod management functions
+Pod management functions - with Restarts column (current namespace only)
 """
 
 import subprocess
@@ -15,19 +15,52 @@ from utils.yaml_helpers import (check_and_install_vim, edit_yaml_with_vim,
 from resources.common import get_pod_list_with_numbers, resolve_pod_identifier
 
 def list_pods_with_numbers():
+    """Display numbered Pod list with Restarts column (current namespace only)"""
     print("\n" + t("list_pods_title"))
-    numbered_list, _, output = get_pod_list_with_numbers()
-    if numbered_list is None:
-        cprint(Color.RED, t("fail") + " " + t("list_pods_fail") + ": " + output)
+    result = subprocess.run(['kubectl', 'get', 'pods', '-o', 'wide', '--show-labels'], capture_output=True, text=True)
+    if result.returncode != 0:
+        cprint(Color.RED, t("fail") + " " + t("list_pods_fail") + ": " + result.stderr)
         return
-    if not numbered_list:
+    
+    lines = result.stdout.strip().split('\n')
+    if len(lines) <= 1:
         cprint(Color.YELLOW, t("list_pods_no_pods"))
         return
-    print(f"{Color.BOLD}{Color.CYAN}{'#':<4} {'Pod Name':<30} {'Ready':<8} {'Status':<12} {'IP':<16} {'Node':<20}{Color.END}")
-    print("-" * 95)
-    for idx, name, data in numbered_list:
-        print(f"{Color.GREEN}{idx:<4}{Color.END} {data['name']:<30} {data['ready']:<8} {data['status']:<12} {data['ip']:<16} {data['node']:<20}")
-    return numbered_list
+    
+    pod_data = []
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) >= 7:
+            name = parts[0]
+            ready = parts[1]
+            status = parts[2]
+            restarts = parts[3]
+            age = parts[4]
+            ip = parts[5]
+            node = parts[6]
+            labels = parts[-1] if len(parts) > 7 else ''
+            pod_data.append({
+                'name': name,
+                'ready': ready,
+                'status': status,
+                'restarts': restarts,
+                'age': age,
+                'ip': ip,
+                'node': node,
+                'labels': labels
+            })
+    
+    print(f"{Color.BOLD}{Color.CYAN}{'#':<4} {'Pod Name':<30} {'Ready':<8} {'Restarts':<10} {'Status':<12} {'IP':<16} {'Node':<20} {'Labels':<30}{Color.END}")
+    print("-" * 135)
+    for idx, data in enumerate(pod_data, 1):
+        labels = data['labels']
+        if len(labels) > 30:
+            labels = labels[:27] + '...'
+        print(f"{Color.GREEN}{idx:<4}{Color.END} {data['name']:<30} {data['ready']:<8} {data['restarts']:<10} {data['status']:<12} {data['ip']:<16} {data['node']:<20} {labels:<30}")
+    
+    return pod_data
 
 def quick_deploy():
     print("\n" + t("create_pod_title"))

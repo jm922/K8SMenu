@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 from utils.color import cprint, Color
 
-VERSION = "V0.81"
+VERSION = "V0.83"
 
 VERSION_CHANGES = {
     "V0.10": {
@@ -180,11 +180,30 @@ VERSION_CHANGES = {
     },
     "V0.81": {
         "type": "Feature Enhancement",
-        "description": "Enhanced Deployment list and edit with rollout status",
+        "description": "Enhanced Pod and Deployment listings",
         "changes": [
-            "Deployment list now shows ReplicaSet and Pod information",
-            "After editing, automatic rollout status check with progress output",
-            "Improved column layout for better readability"
+            "Pod list now shows Namespace and Labels columns",
+            "Deployment list removed Pods column (now separate option)",
+            "New menu option 'Show Pods of Deployment' to list pods under a specific Deployment",
+            "Improved readability with truncated long fields"
+        ]
+    },
+    "V0.82": {
+        "type": "Improvement",
+        "description": "Integrated Show Pods into Deployment list",
+        "changes": [
+            "After listing Deployments, you can now optionally view Pods of a selected Deployment",
+            "Removed separate 'Show Pods of Deployment' menu option for cleaner interface",
+            "Pods display includes Namespace and Labels columns"
+        ]
+    },
+    "V0.83": {
+        "type": "Bug Fix",
+        "description": "Fixed empty Namespace in Pod list",
+        "changes": [
+            "Now uses --all-namespaces to fetch pods, so Namespace column shows actual pod namespace",
+            "Improved Pod list display with correct namespace information",
+            "Show Deployment Pods now also correctly shows namespace"
         ]
     }
 }
