@@ -357,14 +357,12 @@ def quick_deploy_deployment():
         _pause()
         return
 
-    # ENV
     env_vars = []
     while _input_yes_no("Add environment variables?", default=False):
         key = _input_required("  Environment variable name")
         value = _input_required("  Environment variable value")
         env_vars.append({"name": key, "value": value})
 
-    # RESOURCES
     resources = None
     if _input_yes_no("Set resource limits?", default=False):
         cpu_req = input("CPU request (e.g. 100m) [default: 100m]: ").strip() or "100m"
@@ -383,7 +381,6 @@ def quick_deploy_deployment():
             },
         }
 
-    # PROBES
     probes = {}
 
     if _input_yes_no("Enable readinessProbe?", default=False):
@@ -589,6 +586,99 @@ def scale_deployment():
     if desired != ready or desired != available:
         print()
         cprint(Color.YELLOW, "Scaling is still in progress. Final readiness may take a few more seconds.")
+
+    _pause()
+
+
+def rollout_status_deployment():
+    """
+    Show rollout status for a selected Deployment.
+    """
+    print(f"\n{Color.BOLD}{Color.CYAN}--- Rollout Status ---{Color.END}")
+
+    result = list_deployments_with_numbers()
+    if result is None:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    numbered_list, dep_map = result
+    if not numbered_list:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    identifier = _input_required("Enter deployment number or name")
+    dep_name = resolve_deployment_identifier(identifier, dep_map)
+
+    if not dep_name:
+        cprint(Color.RED, f"Deployment not found: {identifier}")
+        _pause()
+        return
+
+    timeout = _input_default("Enter rollout timeout", "60s")
+
+    rollout_cmd = [
+        "kubectl",
+        "rollout",
+        "status",
+        f"deployment/{dep_name}",
+        f"--timeout={timeout}"
+    ]
+    cmd_display = " ".join(shlex.quote(part) for part in rollout_cmd)
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Rollout status preview{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
+    print(f"{Color.BLUE}Timeout:{Color.END}    {Color.YELLOW}{timeout}{Color.END}")
+    print()
+    print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
+    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+
+    if not _input_yes_no("Proceed with rollout status check?", default=True):
+        cprint(Color.YELLOW, "Rollout status check cancelled.")
+        _pause()
+        return
+
+    print()
+    cprint(Color.CYAN, "Checking rollout status...")
+
+    result = subprocess.run(
+        rollout_cmd,
+        capture_output=True,
+        text=True
+    )
+
+    print()
+
+    if result.returncode == 0:
+        cprint(Color.GREEN, "Rollout status completed successfully.")
+        if result.stdout.strip():
+            print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
+            print(f"{Color.GREEN}{result.stdout.strip()}{Color.END}")
+    else:
+        cprint(Color.RED, "Rollout status check failed or timed out.")
+        if result.stderr.strip():
+            print(f"{Color.RED}{result.stderr.strip()}{Color.END}")
+        elif result.stdout.strip():
+            print(f"{Color.RED}{result.stdout.strip()}{Color.END}")
+
+    try:
+        dep_json = client.get_json("deployment", extra_args=[dep_name])
+        desired = dep_json.get("spec", {}).get("replicas", 0)
+        status = dep_json.get("status", {})
+        updated = status.get("updatedReplicas", 0)
+        ready = status.get("readyReplicas", 0)
+        available = status.get("availableReplicas", 0)
+
+        print(f"\n{Color.BOLD}{Color.CYAN}Current deployment status{Color.END}")
+        print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
+        print(f"{Color.BLUE}Desired replicas:{Color.END} {desired}")
+        print(f"{Color.BLUE}Updated replicas:{Color.END} {updated}")
+        print(f"{Color.BLUE}Ready replicas:{Color.END}   {ready}")
+        print(f"{Color.BLUE}Available:{Color.END}        {available}")
+
+    except K8sClientError as e:
+        cprint(Color.YELLOW, f"Failed to fetch deployment details after rollout check: {e}")
 
     _pause()
 
@@ -1115,10 +1205,11 @@ def deployment_menu():
         print("3. List all Deployments")
         print("4. Describe Deployment")
         print("5. Scale Deployment")
-        print("6. Export Deployment to YAML")
-        print("7. Edit Deployment")
-        print("8. Back to Main Menu")
-        choice = input("Choose (1-8): ").strip()
+        print("6. Rollout Status")
+        print("7. Export Deployment to YAML")
+        print("8. Edit Deployment")
+        print("9. Back to Main Menu")
+        choice = input("Choose (1-9): ").strip()
 
         if choice == "1":
             create_deployment_menu()
@@ -1131,10 +1222,12 @@ def deployment_menu():
         elif choice == "5":
             scale_deployment()
         elif choice == "6":
-            export_deployment_menu()
+            rollout_status_deployment()
         elif choice == "7":
-            edit_deployment_menu()
+            export_deployment_menu()
         elif choice == "8":
+            edit_deployment_menu()
+        elif choice == "9":
             break
         else:
             cprint(Color.RED, "Invalid option.")
