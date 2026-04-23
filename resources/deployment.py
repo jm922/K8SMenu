@@ -77,6 +77,45 @@ def _get_container_list(dep_json):
     return dep_json.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
 
 
+def _get_deployment_status_numbers(dep_json):
+    spec = dep_json.get("spec", {})
+    status = dep_json.get("status", {})
+    return {
+        "desired": spec.get("replicas", 0),
+        "updated": status.get("updatedReplicas", 0),
+        "ready": status.get("readyReplicas", 0),
+        "available": status.get("availableReplicas", 0),
+        "unavailable": status.get("unavailableReplicas", 0),
+    }
+
+
+def _is_fully_rolled_out(dep_json):
+    numbers = _get_deployment_status_numbers(dep_json)
+    desired = numbers["desired"]
+    updated = numbers["updated"]
+    ready = numbers["ready"]
+    available = numbers["available"]
+    unavailable = numbers["unavailable"]
+
+    return (
+        desired == updated
+        and desired == ready
+        and desired == available
+        and unavailable == 0
+    )
+
+
+def _print_deployment_status(dep_name, dep_json, title="Current deployment status"):
+    numbers = _get_deployment_status_numbers(dep_json)
+
+    print(f"\n{Color.BOLD}{Color.CYAN}{title}{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
+    print(f"{Color.BLUE}Desired replicas:{Color.END} {numbers['desired']}")
+    print(f"{Color.BLUE}Updated replicas:{Color.END} {numbers['updated']}")
+    print(f"{Color.BLUE}Ready replicas:{Color.END}   {numbers['ready']}")
+    print(f"{Color.BLUE}Available:{Color.END}        {numbers['available']}")
+
+
 def _apply_yaml_content(yaml_content):
     """
     Apply YAML content to the cluster with English-only messages.
@@ -316,6 +355,11 @@ def show_deployment_pods(dep_name=None):
 def list_deployments():
     """
     List all Deployments and optionally show Pods for one Deployment.
+
+    Improved interaction:
+    - Enter deployment number/name directly to show pods
+    - Press Enter to skip
+    - Enter q/quit to skip
     """
     result = list_deployments_with_numbers()
     if result is None:
@@ -325,19 +369,24 @@ def list_deployments():
     if not numbered_list:
         return
 
-    if _input_yes_no("Do you want to see pods of a deployment?", default=False):
-        print("Enter deployment number or name to show pods (or 'q' to quit):")
-        identifier = input("").strip().lower()
-        if identifier in ["q", "quit"]:
-            return
+    print("\nEnter deployment number or name to show pods.")
+    print("Press Enter to skip, or enter 'q' to quit this step.")
+    identifier = input("Show pods for deployment: ").strip()
 
-        dep_name = resolve_deployment_identifier(identifier, dep_map)
-        if dep_name:
-            show_deployment_pods(dep_name)
-            return
+    if identifier == "":
+        _pause()
+        return
 
-        cprint(Color.RED, f"Deployment not found: {identifier}")
+    if identifier.lower() in ["q", "quit"]:
+        _pause()
+        return
 
+    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    if dep_name:
+        show_deployment_pods(dep_name)
+        return
+
+    cprint(Color.RED, f"Deployment not found: {identifier}")
     _pause()
 
 
@@ -582,20 +631,9 @@ def scale_deployment():
         _pause()
         return
 
-    desired = updated_json.get("spec", {}).get("replicas", 0)
-    status = updated_json.get("status", {})
-    ready = status.get("readyReplicas", 0)
-    available = status.get("availableReplicas", 0)
-    updated = status.get("updatedReplicas", 0)
+    _print_deployment_status(dep_name, updated_json, "Updated deployment status")
 
-    print(f"\n{Color.BOLD}{Color.CYAN}Updated deployment status{Color.END}")
-    print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
-    print(f"{Color.BLUE}Desired replicas:{Color.END} {desired}")
-    print(f"{Color.BLUE}Updated replicas:{Color.END} {updated}")
-    print(f"{Color.BLUE}Ready replicas:{Color.END}   {ready}")
-    print(f"{Color.BLUE}Available:{Color.END}        {available}")
-
-    if desired != ready or desired != available:
+    if not _is_fully_rolled_out(updated_json):
         print()
         cprint(Color.YELLOW, "Scaling is still in progress. Final readiness may take a few more seconds.")
 
@@ -742,21 +780,17 @@ def update_deployment_image():
             updated_image = container.get("image", new_image)
             break
 
-    desired = updated_json.get("spec", {}).get("replicas", 0)
-    status = updated_json.get("status", {})
-    ready = status.get("readyReplicas", 0)
-    available = status.get("availableReplicas", 0)
-    updated = status.get("updatedReplicas", 0)
+    numbers = _get_deployment_status_numbers(updated_json)
 
     print(f"\n{Color.BOLD}{Color.CYAN}Updated deployment status{Color.END}")
     print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
     print(f"{Color.BLUE}Container:{Color.END}        {container_name}")
     print(f"{Color.BLUE}Previous image:{Color.END}   {current_image}")
     print(f"{Color.BLUE}Current image:{Color.END}    {updated_image}")
-    print(f"{Color.BLUE}Desired replicas:{Color.END} {desired}")
-    print(f"{Color.BLUE}Updated replicas:{Color.END} {updated}")
-    print(f"{Color.BLUE}Ready replicas:{Color.END}   {ready}")
-    print(f"{Color.BLUE}Available:{Color.END}        {available}")
+    print(f"{Color.BLUE}Desired replicas:{Color.END} {numbers['desired']}")
+    print(f"{Color.BLUE}Updated replicas:{Color.END} {numbers['updated']}")
+    print(f"{Color.BLUE}Ready replicas:{Color.END}   {numbers['ready']}")
+    print(f"{Color.BLUE}Available:{Color.END}        {numbers['available']}")
 
     print()
     cprint(Color.YELLOW, "Image update was accepted. Rollout may still be in progress.")
@@ -768,6 +802,9 @@ def update_deployment_image():
 def rollout_status_deployment():
     """
     Show rollout status for a selected Deployment.
+    Improved logic:
+    - distinguish true failure from timeout
+    - detect 'timed out but appears fully rolled out'
     """
     print(f"\n{Color.BOLD}{Color.CYAN}--- Rollout Status ---{Color.END}")
 
@@ -791,7 +828,7 @@ def rollout_status_deployment():
         _pause()
         return
 
-    timeout = _input_default("Enter rollout timeout", "60s")
+    timeout = _input_default("Enter rollout timeout", "180s")
 
     rollout_cmd = [
         "kubectl",
@@ -825,35 +862,48 @@ def rollout_status_deployment():
 
     print()
 
+    raw_output = (result.stderr or result.stdout or "").strip()
+
+    try:
+        dep_json = client.get_json("deployment", extra_args=[dep_name])
+    except K8sClientError as e:
+        if result.returncode == 0:
+            cprint(Color.GREEN, "Rollout status completed successfully.")
+            if result.stdout.strip():
+                print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
+                print(f"{Color.GREEN}{result.stdout.strip()}{Color.END}")
+        else:
+            cprint(Color.RED, "Rollout status check failed or timed out.")
+            if raw_output:
+                print(f"{Color.RED}{raw_output}{Color.END}")
+
+        cprint(Color.YELLOW, f"Failed to fetch deployment details after rollout check: {e}")
+        _pause()
+        return
+
+    fully_rolled_out = _is_fully_rolled_out(dep_json)
+
     if result.returncode == 0:
         cprint(Color.GREEN, "Rollout status completed successfully.")
         if result.stdout.strip():
             print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
             print(f"{Color.GREEN}{result.stdout.strip()}{Color.END}")
     else:
-        cprint(Color.RED, "Rollout status check failed or timed out.")
-        if result.stderr.strip():
-            print(f"{Color.RED}{result.stderr.strip()}{Color.END}")
-        elif result.stdout.strip():
-            print(f"{Color.RED}{result.stdout.strip()}{Color.END}")
+        if fully_rolled_out:
+            cprint(Color.YELLOW, "Rollout status command timed out, but the Deployment now appears fully rolled out.")
+            if raw_output:
+                print(f"{Color.YELLOW}{raw_output}{Color.END}")
+        else:
+            cprint(Color.RED, "Rollout status check failed or timed out.")
+            if raw_output:
+                print(f"{Color.RED}{raw_output}{Color.END}")
 
-    try:
-        dep_json = client.get_json("deployment", extra_args=[dep_name])
-        desired = dep_json.get("spec", {}).get("replicas", 0)
-        status = dep_json.get("status", {})
-        updated = status.get("updatedReplicas", 0)
-        ready = status.get("readyReplicas", 0)
-        available = status.get("availableReplicas", 0)
+    _print_deployment_status(dep_name, dep_json, "Current deployment status")
 
-        print(f"\n{Color.BOLD}{Color.CYAN}Current deployment status{Color.END}")
-        print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
-        print(f"{Color.BLUE}Desired replicas:{Color.END} {desired}")
-        print(f"{Color.BLUE}Updated replicas:{Color.END} {updated}")
-        print(f"{Color.BLUE}Ready replicas:{Color.END}   {ready}")
-        print(f"{Color.BLUE}Available:{Color.END}        {available}")
-
-    except K8sClientError as e:
-        cprint(Color.YELLOW, f"Failed to fetch deployment details after rollout check: {e}")
+    if result.returncode != 0 and not fully_rolled_out:
+        print()
+        cprint(Color.YELLOW, "The Deployment does not appear fully rolled out yet.")
+        cprint(Color.YELLOW, "You may need more time, or there may be an actual rollout problem.")
 
     _pause()
 
@@ -1137,21 +1187,17 @@ def rollback_deployment():
     updated_containers = _get_container_list(updated_json)
     updated_image_summary = ", ".join([f"{c.get('name', '')}={c.get('image', '')}" for c in updated_containers])
 
-    desired = updated_json.get("spec", {}).get("replicas", 0)
-    status = updated_json.get("status", {})
-    ready = status.get("readyReplicas", 0)
-    available = status.get("availableReplicas", 0)
-    updated = status.get("updatedReplicas", 0)
+    numbers = _get_deployment_status_numbers(updated_json)
 
     print(f"\n{Color.BOLD}{Color.CYAN}Updated deployment status{Color.END}")
     print(f"{Color.BLUE}Deployment:{Color.END}        {dep_name}")
     print(f"{Color.BLUE}Previous revision:{Color.END} {current_revision}")
     print(f"{Color.BLUE}Current revision:{Color.END}  {new_revision}")
     print(f"{Color.BLUE}Images:{Color.END}            {updated_image_summary or 'N/A'}")
-    print(f"{Color.BLUE}Desired replicas:{Color.END}  {desired}")
-    print(f"{Color.BLUE}Updated replicas:{Color.END}  {updated}")
-    print(f"{Color.BLUE}Ready replicas:{Color.END}    {ready}")
-    print(f"{Color.BLUE}Available:{Color.END}         {available}")
+    print(f"{Color.BLUE}Desired replicas:{Color.END}  {numbers['desired']}")
+    print(f"{Color.BLUE}Updated replicas:{Color.END}  {numbers['updated']}")
+    print(f"{Color.BLUE}Ready replicas:{Color.END}    {numbers['ready']}")
+    print(f"{Color.BLUE}Available:{Color.END}         {numbers['available']}")
 
     print()
     cprint(Color.YELLOW, "Rollback was accepted. Rollout may still be in progress.")
@@ -1498,9 +1544,9 @@ def export_deployment_menu():
     """
     while True:
         print("\n--- Export Deployment YAML ---")
-        print("1. Show Deployment YAML")
-        print("2. Save Deployment YAML to file")
-        print("3. Back")
+        print("1. Show Deployment YAML (print to screen)")
+        print("2. Save Deployment YAML to file (local file)")
+        print("3. Back (return)")
         choice = input("Choose (1-3): ").strip()
 
         if choice == "1":
@@ -1634,9 +1680,9 @@ def edit_deployment_menu():
     """
     while True:
         print("\n--- Edit Deployment ---")
-        print("1. Edit deployment directly with kubectl")
-        print("2. Edit from YAML file")
-        print("3. Back")
+        print("1. Edit deployment directly with kubectl (live edit)")
+        print("2. Edit from YAML file (apply file)")
+        print("3. Back (return)")
         choice = input("Choose (1-3): ").strip()
 
         if choice == "1":
@@ -1656,9 +1702,9 @@ def create_deployment_menu():
     while True:
         print("\n--- Create Deployment Options ---")
         print("Note: Quick Deploy probe support is currently basic and should be enhanced later.")
-        print("1. Quick Deploy (Interactive Wizard)")
-        print("2. Create YAML (Edit YAML file manually)")
-        print("3. Back to Deployment Management")
+        print("1. Quick Deploy (interactive wizard)")
+        print("2. Create YAML (manual edit)")
+        print("3. Back (return)")
         choice = input("Choose (1-3): ").strip()
 
         if choice == "1":
@@ -1677,19 +1723,19 @@ def deployment_menu():
     """
     while True:
         print("\n--- Deployment Management ---")
-        print("1. List Deployments")
-        print("2. View Deployment Details")
-        print("3. Create Deployment")
-        print("4. Scale Replicas")
-        print("5. Update Deployment Image")
-        print("6. Check Rollout Status")
-        print("7. View Rollout History")
-        print("8. View Revision Details")
-        print("9. Roll Back Deployment")
-        print("10. Edit Deployment")
-        print("11. Export Deployment YAML")
-        print("12. Delete Deployment")
-        print("13. Back to Main Menu")
+        print("1. List Deployments (overview)")
+        print("2. View Deployment Details (kubectl describe)")
+        print("3. Create Deployment (quick deploy / YAML)")
+        print("4. Scale Replicas (change replica count)")
+        print("5. Update Deployment Image (set image)")
+        print("6. Check Rollout Status (monitor progress)")
+        print("7. View Rollout History (revision list)")
+        print("8. View Revision Details (specific revision)")
+        print("9. Roll Back Deployment (previous revision)")
+        print("10. Edit Deployment (live / YAML)")
+        print("11. Export Deployment YAML (show / save)")
+        print("12. Delete Deployment (dangerous)")
+        print("13. Back to Main Menu (return)")
         choice = input("Choose (1-13): ").strip()
 
         if choice == "1":
