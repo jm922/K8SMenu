@@ -65,6 +65,18 @@ def _format_age(creation_timestamp):
     return creation_timestamp or ""
 
 
+def _get_current_revision(dep_json):
+    return (
+        dep_json.get("metadata", {})
+        .get("annotations", {})
+        .get("deployment.kubernetes.io/revision", "unknown")
+    )
+
+
+def _get_container_list(dep_json):
+    return dep_json.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+
+
 def _apply_yaml_content(yaml_content):
     """
     Apply YAML content to the cluster with English-only messages.
@@ -590,6 +602,169 @@ def scale_deployment():
     _pause()
 
 
+def update_deployment_image():
+    """
+    Update the image of a container in a Deployment.
+    Supports single-container and multi-container Deployments.
+    """
+    print(f"\n{Color.BOLD}{Color.CYAN}--- Update Deployment Image ---{Color.END}")
+
+    result = list_deployments_with_numbers()
+    if result is None:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    numbered_list, dep_map = result
+    if not numbered_list:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    identifier = _input_required("Enter deployment number or name")
+    dep_name = resolve_deployment_identifier(identifier, dep_map)
+
+    if not dep_name:
+        cprint(Color.RED, f"Deployment not found: {identifier}")
+        _pause()
+        return
+
+    try:
+        dep_json = client.get_json("deployment", extra_args=[dep_name])
+    except K8sClientError as e:
+        cprint(Color.RED, f"Failed to get deployment details: {e}")
+        _pause()
+        return
+
+    containers = _get_container_list(dep_json)
+    if not containers:
+        cprint(Color.RED, "No containers found in the selected Deployment.")
+        _pause()
+        return
+
+    selected_container = None
+
+    if len(containers) == 1:
+        selected_container = containers[0]
+        print(f"\n{Color.BOLD}{Color.CYAN}Current container{Color.END}")
+        print(f"{Color.BLUE}Container:{Color.END} {selected_container.get('name', '')}")
+        print(f"{Color.BLUE}Image:{Color.END}     {selected_container.get('image', '')}")
+    else:
+        print(f"\n{Color.BOLD}{Color.CYAN}Current containers{Color.END}")
+        container_map = {}
+        for idx, container in enumerate(containers, 1):
+            cname = container.get("name", "")
+            cimage = container.get("image", "")
+            print(f"{Color.GREEN}{idx}.{Color.END} {cname:<20} {cimage}")
+            container_map[str(idx)] = container
+            container_map[cname] = container
+
+        container_identifier = _input_required("Enter container number or name")
+        selected_container = container_map.get(container_identifier)
+
+        if not selected_container:
+            cprint(Color.RED, f"Container not found: {container_identifier}")
+            _pause()
+            return
+
+    container_name = selected_container.get("name", "")
+    current_image = selected_container.get("image", "")
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Image update target{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END}    {dep_name}")
+    print(f"{Color.BLUE}Container:{Color.END}     {container_name}")
+    print(f"{Color.BLUE}Current image:{Color.END} {current_image}")
+
+    new_image = _input_required("Enter new image")
+
+    if new_image == current_image:
+        cprint(Color.YELLOW, f"Image is already set to {current_image}. No changes applied.")
+        _pause()
+        return
+
+    update_cmd = [
+        "kubectl",
+        "set",
+        "image",
+        f"deployment/{dep_name}",
+        f"{container_name}={new_image}"
+    ]
+    cmd_display = " ".join(shlex.quote(part) for part in update_cmd)
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Image update preview{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END}    {dep_name}")
+    print(f"{Color.BLUE}Container:{Color.END}     {container_name}")
+    print(f"{Color.BLUE}Current image:{Color.END} {current_image}")
+    print(f"{Color.BLUE}Target image:{Color.END}  {Color.YELLOW}{new_image}{Color.END}")
+    print()
+    print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
+    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+
+    if not _input_yes_no("Proceed with image update?", default=True):
+        cprint(Color.YELLOW, "Image update cancelled.")
+        _pause()
+        return
+
+    result = subprocess.run(
+        update_cmd,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        print()
+        cprint(Color.RED, "Failed to update deployment image.")
+        if result.stderr.strip():
+            print(f"{Color.RED}{result.stderr.strip()}{Color.END}")
+        elif result.stdout.strip():
+            print(f"{Color.RED}{result.stdout.strip()}{Color.END}")
+        _pause()
+        return
+
+    print()
+    cprint(Color.GREEN, "Image update command applied successfully.")
+
+    if result.stdout.strip():
+        print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
+        print(f"{Color.GREEN}{result.stdout.strip()}{Color.END}")
+
+    try:
+        updated_json = client.get_json("deployment", extra_args=[dep_name])
+    except K8sClientError as e:
+        cprint(Color.YELLOW, f"Image updated, but failed to fetch updated deployment state: {e}")
+        _pause()
+        return
+
+    updated_containers = _get_container_list(updated_json)
+    updated_image = new_image
+    for container in updated_containers:
+        if container.get("name") == container_name:
+            updated_image = container.get("image", new_image)
+            break
+
+    desired = updated_json.get("spec", {}).get("replicas", 0)
+    status = updated_json.get("status", {})
+    ready = status.get("readyReplicas", 0)
+    available = status.get("availableReplicas", 0)
+    updated = status.get("updatedReplicas", 0)
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Updated deployment status{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
+    print(f"{Color.BLUE}Container:{Color.END}        {container_name}")
+    print(f"{Color.BLUE}Previous image:{Color.END}   {current_image}")
+    print(f"{Color.BLUE}Current image:{Color.END}    {updated_image}")
+    print(f"{Color.BLUE}Desired replicas:{Color.END} {desired}")
+    print(f"{Color.BLUE}Updated replicas:{Color.END} {updated}")
+    print(f"{Color.BLUE}Ready replicas:{Color.END}   {ready}")
+    print(f"{Color.BLUE}Available:{Color.END}        {available}")
+
+    print()
+    cprint(Color.YELLOW, "Image update was accepted. Rollout may still be in progress.")
+    cprint(Color.YELLOW, "Use 'Check Rollout Status' to monitor completion.")
+
+    _pause()
+
+
 def rollout_status_deployment():
     """
     Show rollout status for a selected Deployment.
@@ -679,6 +854,308 @@ def rollout_status_deployment():
 
     except K8sClientError as e:
         cprint(Color.YELLOW, f"Failed to fetch deployment details after rollout check: {e}")
+
+    _pause()
+
+
+def view_rollout_history():
+    """
+    View rollout history for a selected Deployment.
+    """
+    print(f"\n{Color.BOLD}{Color.CYAN}--- View Rollout History ---{Color.END}")
+
+    result = list_deployments_with_numbers()
+    if result is None:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    numbered_list, dep_map = result
+    if not numbered_list:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    identifier = _input_required("Enter deployment number or name")
+    dep_name = resolve_deployment_identifier(identifier, dep_map)
+
+    if not dep_name:
+        cprint(Color.RED, f"Deployment not found: {identifier}")
+        _pause()
+        return
+
+    try:
+        dep_json = client.get_json("deployment", extra_args=[dep_name])
+    except K8sClientError as e:
+        cprint(Color.RED, f"Failed to get deployment details: {e}")
+        _pause()
+        return
+
+    current_revision = _get_current_revision(dep_json)
+    containers = _get_container_list(dep_json)
+    image_summary = ", ".join([f"{c.get('name', '')}={c.get('image', '')}" for c in containers])
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Current deployment state{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
+    print(f"{Color.BLUE}Revision:{Color.END}   {current_revision}")
+    print(f"{Color.BLUE}Images:{Color.END}     {image_summary or 'N/A'}")
+
+    history_cmd = [
+        "kubectl",
+        "rollout",
+        "history",
+        f"deployment/{dep_name}"
+    ]
+    cmd_display = " ".join(shlex.quote(part) for part in history_cmd)
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Rollout history preview{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
+    print()
+    print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
+    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+
+    if not _input_yes_no("Proceed with rollout history check?", default=True):
+        cprint(Color.YELLOW, "Rollout history check cancelled.")
+        _pause()
+        return
+
+    print()
+    cprint(Color.CYAN, "Checking rollout history...")
+
+    result = subprocess.run(
+        history_cmd,
+        capture_output=True,
+        text=True
+    )
+
+    print()
+
+    if result.returncode == 0:
+        cprint(Color.GREEN, "Rollout history retrieved successfully.")
+        if result.stdout.strip():
+            print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
+            print(result.stdout.strip())
+    else:
+        cprint(Color.RED, "Failed to get rollout history.")
+        if result.stderr.strip():
+            print(f"{Color.RED}{result.stderr.strip()}{Color.END}")
+        elif result.stdout.strip():
+            print(f"{Color.RED}{result.stdout.strip()}{Color.END}")
+
+    _pause()
+
+
+def view_revision_details():
+    """
+    View rollout history details for a specific revision.
+    """
+    print(f"\n{Color.BOLD}{Color.CYAN}--- View Revision Details ---{Color.END}")
+
+    result = list_deployments_with_numbers()
+    if result is None:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    numbered_list, dep_map = result
+    if not numbered_list:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    identifier = _input_required("Enter deployment number or name")
+    dep_name = resolve_deployment_identifier(identifier, dep_map)
+
+    if not dep_name:
+        cprint(Color.RED, f"Deployment not found: {identifier}")
+        _pause()
+        return
+
+    try:
+        dep_json = client.get_json("deployment", extra_args=[dep_name])
+    except K8sClientError as e:
+        cprint(Color.RED, f"Failed to get deployment details: {e}")
+        _pause()
+        return
+
+    current_revision = _get_current_revision(dep_json)
+    containers = _get_container_list(dep_json)
+    image_summary = ", ".join([f"{c.get('name', '')}={c.get('image', '')}" for c in containers])
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Current deployment state{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
+    print(f"{Color.BLUE}Current revision:{Color.END} {current_revision}")
+    print(f"{Color.BLUE}Images:{Color.END}           {image_summary or 'N/A'}")
+
+    revision = _input_required("Enter revision number")
+
+    if not revision.isdigit():
+        cprint(Color.RED, "Revision must be a positive integer.")
+        _pause()
+        return
+
+    revision_cmd = [
+        "kubectl",
+        "rollout",
+        "history",
+        f"deployment/{dep_name}",
+        f"--revision={revision}"
+    ]
+    cmd_display = " ".join(shlex.quote(part) for part in revision_cmd)
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Revision details preview{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
+    print(f"{Color.BLUE}Revision:{Color.END}   {revision}")
+    print()
+    print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
+    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+
+    if not _input_yes_no("Proceed with revision details check?", default=True):
+        cprint(Color.YELLOW, "Revision details check cancelled.")
+        _pause()
+        return
+
+    print()
+    cprint(Color.CYAN, "Checking revision details...")
+
+    result = subprocess.run(
+        revision_cmd,
+        capture_output=True,
+        text=True
+    )
+
+    print()
+
+    if result.returncode == 0:
+        cprint(Color.GREEN, "Revision details retrieved successfully.")
+        if result.stdout.strip():
+            print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
+            print(result.stdout.strip())
+    else:
+        cprint(Color.RED, "Failed to get revision details.")
+        if result.stderr.strip():
+            print(f"{Color.RED}{result.stderr.strip()}{Color.END}")
+        elif result.stdout.strip():
+            print(f"{Color.RED}{result.stdout.strip()}{Color.END}")
+
+    _pause()
+
+
+def rollback_deployment():
+    """
+    Roll back a Deployment to the previous revision.
+    """
+    print(f"\n{Color.BOLD}{Color.CYAN}--- Roll Back Deployment ---{Color.END}")
+
+    result = list_deployments_with_numbers()
+    if result is None:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    numbered_list, dep_map = result
+    if not numbered_list:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    identifier = _input_required("Enter deployment number or name")
+    dep_name = resolve_deployment_identifier(identifier, dep_map)
+
+    if not dep_name:
+        cprint(Color.RED, f"Deployment not found: {identifier}")
+        _pause()
+        return
+
+    try:
+        dep_json = client.get_json("deployment", extra_args=[dep_name])
+    except K8sClientError as e:
+        cprint(Color.RED, f"Failed to get deployment details: {e}")
+        _pause()
+        return
+
+    current_revision = _get_current_revision(dep_json)
+    containers = _get_container_list(dep_json)
+    image_summary = ", ".join([f"{c.get('name', '')}={c.get('image', '')}" for c in containers])
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Current deployment state{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
+    print(f"{Color.BLUE}Revision:{Color.END}   {current_revision}")
+    print(f"{Color.BLUE}Images:{Color.END}     {image_summary or 'N/A'}")
+
+    rollback_cmd = [
+        "kubectl",
+        "rollout",
+        "undo",
+        f"deployment/{dep_name}"
+    ]
+    cmd_display = " ".join(shlex.quote(part) for part in rollback_cmd)
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Rollback preview{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
+    print(f"{Color.BLUE}Revision:{Color.END}   {current_revision}")
+    print()
+    print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
+    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+
+    if not _input_yes_no("Proceed with rollback?", default=True):
+        cprint(Color.YELLOW, "Rollback cancelled.")
+        _pause()
+        return
+
+    result = subprocess.run(
+        rollback_cmd,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        print()
+        cprint(Color.RED, "Failed to roll back deployment.")
+        if result.stderr.strip():
+            print(f"{Color.RED}{result.stderr.strip()}{Color.END}")
+        elif result.stdout.strip():
+            print(f"{Color.RED}{result.stdout.strip()}{Color.END}")
+        _pause()
+        return
+
+    print()
+    cprint(Color.GREEN, "Rollback command applied successfully.")
+
+    if result.stdout.strip():
+        print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
+        print(f"{Color.GREEN}{result.stdout.strip()}{Color.END}")
+
+    try:
+        updated_json = client.get_json("deployment", extra_args=[dep_name])
+    except K8sClientError as e:
+        cprint(Color.YELLOW, f"Rollback applied, but failed to fetch updated deployment state: {e}")
+        _pause()
+        return
+
+    new_revision = _get_current_revision(updated_json)
+    updated_containers = _get_container_list(updated_json)
+    updated_image_summary = ", ".join([f"{c.get('name', '')}={c.get('image', '')}" for c in updated_containers])
+
+    desired = updated_json.get("spec", {}).get("replicas", 0)
+    status = updated_json.get("status", {})
+    ready = status.get("readyReplicas", 0)
+    available = status.get("availableReplicas", 0)
+    updated = status.get("updatedReplicas", 0)
+
+    print(f"\n{Color.BOLD}{Color.CYAN}Updated deployment status{Color.END}")
+    print(f"{Color.BLUE}Deployment:{Color.END}        {dep_name}")
+    print(f"{Color.BLUE}Previous revision:{Color.END} {current_revision}")
+    print(f"{Color.BLUE}Current revision:{Color.END}  {new_revision}")
+    print(f"{Color.BLUE}Images:{Color.END}            {updated_image_summary or 'N/A'}")
+    print(f"{Color.BLUE}Desired replicas:{Color.END}  {desired}")
+    print(f"{Color.BLUE}Updated replicas:{Color.END}  {updated}")
+    print(f"{Color.BLUE}Ready replicas:{Color.END}    {ready}")
+    print(f"{Color.BLUE}Available:{Color.END}         {available}")
+
+    print()
+    cprint(Color.YELLOW, "Rollback was accepted. Rollout may still be in progress.")
+    cprint(Color.YELLOW, "Use 'Check Rollout Status' to monitor completion.")
 
     _pause()
 
@@ -1204,12 +1681,16 @@ def deployment_menu():
         print("2. View Deployment Details")
         print("3. Create Deployment")
         print("4. Scale Replicas")
-        print("5. Check Rollout Status")
-        print("6. Edit Deployment")
-        print("7. Export Deployment YAML")
-        print("8. Delete Deployment")
-        print("9. Back to Main Menu")
-        choice = input("Choose (1-9): ").strip()
+        print("5. Update Deployment Image")
+        print("6. Check Rollout Status")
+        print("7. View Rollout History")
+        print("8. View Revision Details")
+        print("9. Roll Back Deployment")
+        print("10. Edit Deployment")
+        print("11. Export Deployment YAML")
+        print("12. Delete Deployment")
+        print("13. Back to Main Menu")
+        choice = input("Choose (1-13): ").strip()
 
         if choice == "1":
             list_deployments()
@@ -1220,14 +1701,22 @@ def deployment_menu():
         elif choice == "4":
             scale_deployment()
         elif choice == "5":
-            rollout_status_deployment()
+            update_deployment_image()
         elif choice == "6":
-            edit_deployment_menu()
+            rollout_status_deployment()
         elif choice == "7":
-            export_deployment_menu()
+            view_rollout_history()
         elif choice == "8":
-            delete_deployment()
+            view_revision_details()
         elif choice == "9":
+            rollback_deployment()
+        elif choice == "10":
+            edit_deployment_menu()
+        elif choice == "11":
+            export_deployment_menu()
+        elif choice == "12":
+            delete_deployment()
+        elif choice == "13":
             break
         else:
             cprint(Color.RED, "Invalid option.")
