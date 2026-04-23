@@ -899,7 +899,7 @@ def describe_deployment():
         _pause()
         return
 
-    identifier = _input_required("Enter deployment number or name to describe")
+    identifier = _input_required("Enter deployment number or name to view details")
     dep_name = resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
@@ -917,7 +917,7 @@ def describe_deployment():
     if result.returncode == 0:
         print(result.stdout)
     else:
-        cprint(Color.RED, f"Failed to describe deployment: {dep_name}")
+        cprint(Color.RED, f"Failed to view deployment details: {dep_name}")
         if result.stderr.strip():
             print(result.stderr.strip())
 
@@ -1200,33 +1200,33 @@ def deployment_menu():
     """
     while True:
         print("\n--- Deployment Management ---")
-        print("1. Create Deployment")
-        print("2. Delete Deployment")
-        print("3. List all Deployments")
-        print("4. Describe Deployment")
-        print("5. Scale Deployment")
-        print("6. Rollout Status")
-        print("7. Export Deployment to YAML")
-        print("8. Edit Deployment")
+        print("1. List Deployments")
+        print("2. View Deployment Details")
+        print("3. Create Deployment")
+        print("4. Scale Replicas")
+        print("5. Check Rollout Status")
+        print("6. Edit Deployment")
+        print("7. Export Deployment YAML")
+        print("8. Delete Deployment")
         print("9. Back to Main Menu")
         choice = input("Choose (1-9): ").strip()
 
         if choice == "1":
-            create_deployment_menu()
-        elif choice == "2":
-            delete_deployment()
-        elif choice == "3":
             list_deployments()
-        elif choice == "4":
+        elif choice == "2":
             describe_deployment()
-        elif choice == "5":
+        elif choice == "3":
+            create_deployment_menu()
+        elif choice == "4":
             scale_deployment()
-        elif choice == "6":
+        elif choice == "5":
             rollout_status_deployment()
+        elif choice == "6":
+            edit_deployment_menu()
         elif choice == "7":
             export_deployment_menu()
         elif choice == "8":
-            edit_deployment_menu()
+            delete_deployment()
         elif choice == "9":
             break
         else:
