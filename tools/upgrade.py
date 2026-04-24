@@ -105,7 +105,6 @@ def find_target_file(base_dir, filename, exclude_dir):
     exclude_abs = os.path.abspath(exclude_dir)
 
     for root, dirs, files in os.walk(base_dir):
-        # Prune excluded and noisy directories
         dirs[:] = [
             d for d in dirs
             if os.path.abspath(os.path.join(root, d)) != exclude_abs
@@ -602,3 +601,10 @@ def program_upgrade():
         cprint(Color.YELLOW, "You can restart later.")
 
     input(t("press_enter"))
+
+
+def system_upgrade_menu():
+    """
+    Standard zero-argument menu entry for tools/system_tools.py.
+    """
+    program_upgrade()
