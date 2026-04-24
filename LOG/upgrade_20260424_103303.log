@@ -1,0 +1,17 @@
+[2026-04-24 10:33:03] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-04-24 10:33:05] [INFO] Pre-check completed. Total source files: 1
+[2026-04-24 10:33:08] [INFO] Starting upgrade execution for 1 READY file(s).
+[2026-04-24 10:33:09] [INFO] Backed up /home/jun/k8s_manager/tools/system_tools.py -> /home/jun/k8s_manager/tools/system_tools.py.bak
+[2026-04-24 10:33:09] [INFO] Original permissions: 0o100664
+[2026-04-24 10:33:09] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/system_tools.py -> /home/jun/k8s_manager/tools/system_tools.py
+[2026-04-24 10:33:09] [INFO] Restored permissions to 0o100664
+[2026-04-24 10:33:09] [INFO] Performing post-upgrade health check...
+[2026-04-24 10:33:11] [INFO] Import check passed: main
+[2026-04-24 10:33:11] [INFO] Import check passed: tools.system_tools
+[2026-04-24 10:33:11] [INFO] Import check passed: utils.color
+[2026-04-24 10:33:11] [INFO] Import check passed: version
+[2026-04-24 10:33:12] [INFO] Smoke check passed.
+[2026-04-24 10:33:12] [INFO] Health check succeeded.
+[2026-04-24 10:33:12] [INFO] Health check passed. Upgrade successful.
+[2026-04-24 10:33:12] [INFO] Removed backup /home/jun/k8s_manager/tools/system_tools.py.bak
+[2026-04-24 10:33:14] [INFO] Cleared contents of UPGRADE_TMP directory: /home/jun/k8s_manager/UPGRADE_TMP
