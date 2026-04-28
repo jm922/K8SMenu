@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Deployment management functions.
-English-only comments and print messages.
+Deployment management functions
+- Explicit English output
+- Namespace-aware
+- Show full kubectl command before execution
 """
 
+import json
 import os
-import shutil
 import shlex
 import subprocess
 import tempfile
@@ -14,10 +16,9 @@ from datetime import datetime
 import yaml
 
 from utils.color import cprint, Color
-from resources.common import resolve_deployment_identifier
-from k8s.client import K8sClient, K8sClientError
 
-client = K8sClient()
+
+CURRENT_NAMESPACE = "default"
 
 
 def _pause():
@@ -58,11 +59,157 @@ def _truncate(text, length):
 
 
 def _format_age(creation_timestamp):
-    """
-    Keep the raw timestamp for now.
-    A human-readable age can be added later.
-    """
     return creation_timestamp or ""
+
+
+def _highlight(text):
+    return f"{Color.BOLD}{Color.YELLOW}{text}{Color.END}"
+
+
+def _hint(text, danger=False):
+    color = Color.RED if danger else Color.CYAN
+    return f"{color}({text}){Color.END}"
+
+
+def _menu_line(number, label, hint_text=None, danger=False):
+    if hint_text:
+        print(f"{number}. {label} {_hint(hint_text, danger=danger)}")
+    else:
+        print(f"{number}. {label}")
+
+
+def _title_with_ns(title):
+    return f"--- {title} [{_highlight(f'NAMESPACE: {CURRENT_NAMESPACE}')} ] ---".replace(" }", "}")
+
+
+def _print_command(cmd):
+    print("\n" + "-" * 88)
+    cprint(Color.BOLD + Color.YELLOW, "Executing command")
+    cprint(Color.YELLOW, " ".join(shlex.quote(part) for part in cmd))
+    print("-" * 88)
+
+
+def _run_kubectl_text(args):
+    cmd = ["kubectl"] + args
+    _print_command(cmd)
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return None, (result.stderr or result.stdout).strip()
+
+    return result.stdout, None
+
+
+def _run_kubectl_json(args):
+    cmd = ["kubectl"] + args + ["-o", "json"]
+    _print_command(cmd)
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        return None, (result.stderr or result.stdout).strip()
+
+    try:
+        return json.loads(result.stdout), None
+    except Exception as e:
+        return None, str(e)
+
+
+def _ns_args():
+    return ["-n", CURRENT_NAMESPACE]
+
+
+def _list_namespaces():
+    data, err = _run_kubectl_json(["get", "namespaces"])
+    if err:
+        return None, err
+
+    names = []
+    for item in data.get("items", []):
+        name = item.get("metadata", {}).get("name", "")
+        if name:
+            names.append(name)
+
+    return sorted(names), None
+
+
+def _namespace_exists(name):
+    _, err = _run_kubectl_json(["get", "namespace", name])
+    return err is None
+
+
+def _set_namespace():
+    global CURRENT_NAMESPACE
+
+    print("\n--- Set Deployment Namespace ---")
+    print(f"Current namespace: {_highlight(CURRENT_NAMESPACE)}")
+
+    namespaces, err = _list_namespaces()
+    if err:
+        cprint(Color.RED, f"Failed to list namespaces: {err}")
+        if _input_yes_no("Do you want to enter namespace manually anyway?", default=False):
+            namespace = _input_required("Enter namespace")
+            if _namespace_exists(namespace):
+                CURRENT_NAMESPACE = namespace
+                cprint(Color.GREEN, f"Deployment namespace set to: {CURRENT_NAMESPACE}")
+            else:
+                cprint(Color.RED, f"Namespace not found: {namespace}")
+        _pause()
+        return
+
+    if namespaces:
+        print(f"\n{Color.BOLD}{Color.CYAN}Available Namespaces{Color.END}")
+        print("-" * 50)
+        for idx, name in enumerate(namespaces, 1):
+            marker = " (current)" if name == CURRENT_NAMESPACE else ""
+            display = _highlight(name) if name == CURRENT_NAMESPACE else name
+            print(f"{Color.GREEN}{idx:<3}{Color.END} {display}{marker}")
+    else:
+        cprint(Color.YELLOW, "No namespaces found from kubectl output.")
+
+    print("\nEnter a namespace number, namespace name, 'm' for manual input, or 'q' to cancel.")
+    choice = input("Namespace selection: ").strip()
+
+    if not choice or choice.lower() in ("q", "quit", "back"):
+        cprint(Color.YELLOW, "Namespace change cancelled.")
+        _pause()
+        return
+
+    selected_namespace = None
+
+    if choice.lower() == "m":
+        manual_name = _input_required("Enter namespace manually")
+        if manual_name in namespaces or _namespace_exists(manual_name):
+            selected_namespace = manual_name
+        else:
+            cprint(Color.RED, f"Namespace not found: {manual_name}")
+            _pause()
+            return
+    elif choice.isdigit():
+        idx = int(choice)
+        if 1 <= idx <= len(namespaces):
+            selected_namespace = namespaces[idx - 1]
+        else:
+            cprint(Color.RED, f"Invalid namespace number: {choice}")
+            _pause()
+            return
+    else:
+        if choice in namespaces or _namespace_exists(choice):
+            selected_namespace = choice
+        else:
+            cprint(Color.RED, f"Namespace not found: {choice}")
+            _pause()
+            return
+
+    CURRENT_NAMESPACE = selected_namespace
+    cprint(Color.GREEN, f"Deployment namespace set to: {CURRENT_NAMESPACE}")
+    _pause()
+
+
+def _reset_namespace():
+    global CURRENT_NAMESPACE
+    CURRENT_NAMESPACE = "default"
+    cprint(Color.GREEN, "Deployment namespace reset to: default")
+    _pause()
 
 
 def _get_current_revision(dep_json):
@@ -109,6 +256,7 @@ def _print_deployment_status(dep_name, dep_json, title="Current deployment statu
     numbers = _get_deployment_status_numbers(dep_json)
 
     print(f"\n{Color.BOLD}{Color.CYAN}{title}{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}        {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
     print(f"{Color.BLUE}Desired replicas:{Color.END} {numbers['desired']}")
     print(f"{Color.BLUE}Updated replicas:{Color.END} {numbers['updated']}")
@@ -117,9 +265,6 @@ def _print_deployment_status(dep_name, dep_json, title="Current deployment statu
 
 
 def _apply_yaml_content(yaml_content):
-    """
-    Apply YAML content to the cluster with English-only messages.
-    """
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
@@ -127,11 +272,9 @@ def _apply_yaml_content(yaml_content):
             tmp_path = f.name
 
         print("\nApplying configuration to cluster...")
-        result = subprocess.run(
-            ["kubectl", "apply", "-f", tmp_path],
-            capture_output=True,
-            text=True
-        )
+        cmd = ["kubectl", "apply", "-f", tmp_path]
+        _print_command(cmd)
+        result = subprocess.run(cmd, capture_output=True, text=True)
 
         if result.returncode == 0:
             cprint(Color.GREEN, "Success: " + result.stdout.strip())
@@ -150,6 +293,7 @@ def _apply_yaml_content(yaml_content):
 
 
 def _ensure_vim_installed():
+    import shutil
     if shutil.which("vim"):
         return True
     cprint(Color.RED, "vim is not installed. Please install vim first.")
@@ -171,26 +315,21 @@ def _validate_yaml_syntax(filepath):
 
 
 def _validate_with_kubectl(filepath):
-    result = subprocess.run(
-        ["kubectl", "apply", "--dry-run=client", "-f", filepath],
-        capture_output=True,
-        text=True
-    )
-    return result.returncode == 0, result.stderr.strip()
+    cmd = ["kubectl", "apply", "--dry-run=client", "-f", filepath]
+    _print_command(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return result.returncode == 0, (result.stderr or result.stdout).strip()
 
 
 def list_deployments_with_numbers():
-    """
-    Display numbered list of Deployments with labels.
-    """
-    print("\n--- Current Deployment List ---")
+    print(f"\n--- Current Deployment List [{_highlight(f'NAMESPACE: {CURRENT_NAMESPACE}')} ] ---".replace(" }", "}"))
 
-    try:
-        items = client.get_items("deployments")
-    except K8sClientError as e:
-        cprint(Color.RED, f"Failed to list deployments: {e}")
+    data, err = _run_kubectl_json(["get", "deployments"] + _ns_args())
+    if err:
+        cprint(Color.RED, f"Failed to list deployments: {err}")
         return None
 
+    items = data.get("items", [])
     if not items:
         cprint(Color.YELLOW, "No deployments found.")
         return None
@@ -257,10 +396,11 @@ def list_deployments_with_numbers():
     return numbered_list, dep_map
 
 
+def _resolve_deployment_identifier(identifier, dep_map):
+    return dep_map.get(identifier)
+
+
 def show_deployment_pods(dep_name=None):
-    """
-    Show Pods that belong to a specific Deployment.
-    """
     if dep_name is None:
         result = list_deployments_with_numbers()
         if result is None:
@@ -272,22 +412,21 @@ def show_deployment_pods(dep_name=None):
             _pause()
             return
 
-        print(f"\n{Color.BOLD}{Color.CYAN}Available Deployments:{Color.END}")
+        print(f"\n{Color.BOLD}{Color.CYAN}Available Deployments{Color.END}")
         for idx, name, data in numbered_list:
-            print(f"  {Color.GREEN}{idx}{Color.END}. {name} (Ready: {data['ready']})")
+            print(f"  {Color.GREEN}{idx}{Color.END}. {name} {_hint('Ready: ' + data['ready'])}")
 
         identifier = _input_required("Enter deployment number or name")
-        dep_name = resolve_deployment_identifier(identifier, dep_map)
+        dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
         if not dep_name:
             cprint(Color.RED, f"Deployment not found: {identifier}")
             _pause()
             return
 
-    try:
-        dep_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.RED, f"Failed to get deployment details: {e}")
+    dep_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.RED, f"Failed to get deployment details: {err}")
         _pause()
         return
 
@@ -297,14 +436,15 @@ def show_deployment_pods(dep_name=None):
 
     label_selector = ",".join([f"{k}={v}" for k, v in selector.items()])
 
-    try:
-        pod_items = client.get_items("pods", extra_args=["-l", label_selector])
-    except K8sClientError as e:
-        cprint(Color.RED, f"Failed to get pods: {e}")
+    pod_json, err = _run_kubectl_json(["get", "pods"] + _ns_args() + ["-l", label_selector])
+    if err:
+        cprint(Color.RED, f"Failed to get pods: {err}")
         _pause()
         return
 
-    print(f"\nPods for Deployment '{dep_name}' (selector: {label_selector}):")
+    pod_items = pod_json.get("items", [])
+
+    print(f"\nPods for Deployment '{dep_name}' [{_highlight(f'NAMESPACE: {CURRENT_NAMESPACE}')}, selector: {label_selector}]:")
 
     if not pod_items:
         cprint(Color.YELLOW, "No pods found.")
@@ -353,14 +493,6 @@ def show_deployment_pods(dep_name=None):
 
 
 def list_deployments():
-    """
-    List all Deployments and optionally show Pods for one Deployment.
-
-    Improved interaction:
-    - Enter deployment number/name directly to show pods
-    - Press Enter to skip
-    - Enter q/quit to skip
-    """
     result = list_deployments_with_numbers()
     if result is None:
         return
@@ -381,7 +513,7 @@ def list_deployments():
         _pause()
         return
 
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
     if dep_name:
         show_deployment_pods(dep_name)
         return
@@ -390,20 +522,8 @@ def list_deployments():
     _pause()
 
 
-# NOTE:
-# Current Quick Deploy probe support is basic only.
-# It is good for simple testing, but it should be enhanced later.
-# Planned improvements:
-# 1. Support tcpSocket and exec probes
-# 2. Support separate readiness and liveness strategies
-# 3. Support custom initialDelaySeconds / periodSeconds / timeoutSeconds / failureThreshold
-# 4. Support production-friendly endpoints such as /ready /live /health
 def quick_deploy_deployment():
-    """
-    Basic production-friendly Deployment creator.
-    Supports env, resources, readinessProbe, and livenessProbe.
-    """
-    print("\n--- Create Deployment (Quick Deploy) ---")
+    print(f"\n{_title_with_ns('Create Deployment - Quick Deploy')}")
 
     name = _input_required("Deployment name")
     image = _input_required("Image (e.g., nginx:latest)")
@@ -420,8 +540,8 @@ def quick_deploy_deployment():
 
     env_vars = []
     while _input_yes_no("Add environment variables?", default=False):
-        key = _input_required("  Environment variable name")
-        value = _input_required("  Environment variable value")
+        key = _input_required("Environment variable name")
+        value = _input_required("Environment variable value")
         env_vars.append({"name": key, "value": value})
 
     resources = None
@@ -432,14 +552,8 @@ def quick_deploy_deployment():
         mem_lim = input("Memory limit (e.g. 256Mi) [default: 256Mi]: ").strip() or "256Mi"
 
         resources = {
-            "requests": {
-                "cpu": cpu_req,
-                "memory": mem_req,
-            },
-            "limits": {
-                "cpu": cpu_lim,
-                "memory": mem_lim,
-            },
+            "requests": {"cpu": cpu_req, "memory": mem_req},
+            "limits": {"cpu": cpu_lim, "memory": mem_lim},
         }
 
     probes = {}
@@ -447,10 +561,7 @@ def quick_deploy_deployment():
     if _input_yes_no("Enable readinessProbe?", default=False):
         path = input("HTTP path [default: /]: ").strip() or "/"
         probes["readinessProbe"] = {
-            "httpGet": {
-                "path": path,
-                "port": port,
-            },
+            "httpGet": {"path": path, "port": port},
             "initialDelaySeconds": 5,
             "periodSeconds": 10,
         }
@@ -458,10 +569,7 @@ def quick_deploy_deployment():
     if _input_yes_no("Enable livenessProbe?", default=False):
         path = input("HTTP path [default: /]: ").strip() or "/"
         probes["livenessProbe"] = {
-            "httpGet": {
-                "path": path,
-                "port": port,
-            },
+            "httpGet": {"path": path, "port": port},
             "initialDelaySeconds": 10,
             "periodSeconds": 20,
         }
@@ -470,11 +578,7 @@ def quick_deploy_deployment():
         "name": name,
         "image": image,
         "imagePullPolicy": "IfNotPresent",
-        "ports": [
-            {
-                "containerPort": port
-            }
-        ],
+        "ports": [{"containerPort": port}],
     }
 
     if env_vars:
@@ -490,26 +594,15 @@ def quick_deploy_deployment():
         "kind": "Deployment",
         "metadata": {
             "name": name,
-            "labels": {
-                "app": name
-            },
+            "namespace": CURRENT_NAMESPACE,
+            "labels": {"app": name},
         },
         "spec": {
             "replicas": replicas,
-            "selector": {
-                "matchLabels": {
-                    "app": name
-                }
-            },
+            "selector": {"matchLabels": {"app": name}},
             "template": {
-                "metadata": {
-                    "labels": {
-                        "app": name
-                    }
-                },
-                "spec": {
-                    "containers": [container]
-                },
+                "metadata": {"labels": {"app": name}},
+                "spec": {"containers": [container]},
             },
         },
     }
@@ -523,12 +616,144 @@ def quick_deploy_deployment():
     _pause()
 
 
+def generate_deployment_template():
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"deployment_{timestamp}.yaml"
+    template = f"""# Kubernetes Deployment YAML Template
+# Edit this file to create your Deployment
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+  namespace: {CURRENT_NAMESPACE}
+  labels:
+    app: my-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-container
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+"""
+    return filename, template
+
+
+def deployment_yaml_editor_mode():
+    print(f"\n{_title_with_ns('Create Deployment - YAML Editor Mode')}")
+    filename, template = generate_deployment_template()
+
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(template)
+
+    cprint(Color.GREEN, f"Template file created: {filename}")
+
+    if not _ensure_vim_installed():
+        return
+
+    if not _open_in_vim(filename):
+        cprint(Color.RED, "Failed to open vim.")
+        return
+
+    while True:
+        valid, err = _validate_yaml_syntax(filename)
+        if not valid:
+            cprint(Color.RED, f"YAML syntax validation failed: {err}")
+            if not _input_yes_no("Edit the file again?", default=True):
+                cprint(Color.YELLOW, f"Aborted. File kept: {filename}")
+                return
+            _open_in_vim(filename)
+            continue
+
+        kubectl_valid, kubectl_err = _validate_with_kubectl(filename)
+        if not kubectl_valid:
+            cprint(Color.RED, f"kubectl validation failed: {kubectl_err}")
+            if not _input_yes_no("Edit the file again?", default=True):
+                cprint(Color.YELLOW, f"Aborted. File kept: {filename}")
+                return
+            _open_in_vim(filename)
+            continue
+
+        break
+
+    cmd = ["kubectl", "apply", "-f", filename]
+    _print_command(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode == 0:
+        cprint(Color.GREEN, "Deployment applied successfully.")
+        if result.stdout.strip():
+            print(result.stdout.strip())
+    else:
+        cprint(Color.RED, "Failed to apply deployment.")
+        if result.stderr.strip():
+            print(result.stderr.strip())
+
+    _pause()
+
+
+def create_deployment_menu():
+    while True:
+        print(f"\n{_title_with_ns('Create Deployment Options')}")
+        _menu_line("1", "Quick Deploy", "interactive wizard")
+        _menu_line("2", "Create YAML", "manual edit")
+        _menu_line("3", "Back", "return")
+        choice = input("Choose (1-3): ").strip()
+
+        if choice == "1":
+            quick_deploy_deployment()
+        elif choice == "2":
+            deployment_yaml_editor_mode()
+        elif choice == "3":
+            break
+        else:
+            cprint(Color.RED, "Invalid option.")
+
+
+def describe_deployment():
+    result = list_deployments_with_numbers()
+    if result is None:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    numbered_list, dep_map = result
+    if not numbered_list:
+        cprint(Color.YELLOW, "No deployments available.")
+        _pause()
+        return
+
+    identifier = _input_required("Enter deployment number or name to view details")
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
+
+    if not dep_name:
+        cprint(Color.RED, f"Deployment not found: {identifier}")
+        _pause()
+        return
+
+    print(f"Fetching details for deployment '{dep_name}'...")
+    output, err = _run_kubectl_text(["describe", "deployment", dep_name] + _ns_args())
+
+    if err:
+        cprint(Color.RED, f"Failed to view deployment details: {dep_name}")
+        print(err)
+    else:
+        print(output)
+
+    _pause()
+
+
 def scale_deployment():
-    """
-    Scale a Deployment to a new replica count.
-    Show the full kubectl scale command before execution.
-    """
-    print(f"\n{Color.BOLD}{Color.CYAN}--- Scale Deployment ---{Color.END}")
+    print(f"\n{_title_with_ns('Scale Deployment')}")
 
     result = list_deployments_with_numbers()
     if result is None:
@@ -543,23 +768,23 @@ def scale_deployment():
         return
 
     identifier = _input_required("Enter deployment number or name to scale")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
         _pause()
         return
 
-    try:
-        dep_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.RED, f"Failed to get deployment details: {e}")
+    dep_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.RED, f"Failed to get deployment details: {err}")
         _pause()
         return
 
     current_replicas = dep_json.get("spec", {}).get("replicas", 0)
 
     print(f"\n{Color.BOLD}{Color.CYAN}Current deployment{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}        {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Name:{Color.END}             {dep_name}")
     print(f"{Color.BLUE}Current replicas:{Color.END} {Color.YELLOW}{current_replicas}{Color.END}")
 
@@ -581,33 +806,24 @@ def scale_deployment():
         _pause()
         return
 
-    scale_cmd = [
-        "kubectl",
-        "scale",
-        "deployment",
-        dep_name,
-        f"--replicas={new_replicas}"
-    ]
-    cmd_display = " ".join(shlex.quote(part) for part in scale_cmd)
+    scale_cmd = ["kubectl", "scale", "deployment", dep_name, f"--replicas={new_replicas}", "-n", CURRENT_NAMESPACE]
 
     print(f"\n{Color.BOLD}{Color.CYAN}Scale operation preview{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}        {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
     print(f"{Color.BLUE}Current replicas:{Color.END} {current_replicas}")
     print(f"{Color.BLUE}Target replicas:{Color.END}  {Color.YELLOW}{new_replicas}{Color.END}")
     print()
     print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
-    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+    print(f"{Color.YELLOW}{' '.join(shlex.quote(part) for part in scale_cmd)}{Color.END}")
 
     if not _input_yes_no("Proceed with scale operation?", default=True):
         cprint(Color.YELLOW, "Scale operation cancelled.")
         _pause()
         return
 
-    result = subprocess.run(
-        scale_cmd,
-        capture_output=True,
-        text=True
-    )
+    _print_command(scale_cmd)
+    result = subprocess.run(scale_cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
         print()
@@ -624,10 +840,9 @@ def scale_deployment():
         print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
         print(f"{Color.GREEN}{result.stdout.strip()}{Color.END}")
 
-    try:
-        updated_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.YELLOW, f"Scaled, but failed to fetch updated deployment state: {e}")
+    updated_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.YELLOW, f"Scaled, but failed to fetch updated deployment state: {err}")
         _pause()
         return
 
@@ -641,11 +856,7 @@ def scale_deployment():
 
 
 def update_deployment_image():
-    """
-    Update the image of a container in a Deployment.
-    Supports single-container and multi-container Deployments.
-    """
-    print(f"\n{Color.BOLD}{Color.CYAN}--- Update Deployment Image ---{Color.END}")
+    print(f"\n{_title_with_ns('Update Deployment Image')}")
 
     result = list_deployments_with_numbers()
     if result is None:
@@ -660,17 +871,16 @@ def update_deployment_image():
         return
 
     identifier = _input_required("Enter deployment number or name")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
         _pause()
         return
 
-    try:
-        dep_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.RED, f"Failed to get deployment details: {e}")
+    dep_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.RED, f"Failed to get deployment details: {err}")
         _pause()
         return
 
@@ -709,6 +919,7 @@ def update_deployment_image():
     current_image = selected_container.get("image", "")
 
     print(f"\n{Color.BOLD}{Color.CYAN}Image update target{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}     {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END}    {dep_name}")
     print(f"{Color.BLUE}Container:{Color.END}     {container_name}")
     print(f"{Color.BLUE}Current image:{Color.END} {current_image}")
@@ -721,33 +932,29 @@ def update_deployment_image():
         return
 
     update_cmd = [
-        "kubectl",
-        "set",
-        "image",
+        "kubectl", "set", "image",
         f"deployment/{dep_name}",
-        f"{container_name}={new_image}"
+        f"{container_name}={new_image}",
+        "-n", CURRENT_NAMESPACE
     ]
-    cmd_display = " ".join(shlex.quote(part) for part in update_cmd)
 
     print(f"\n{Color.BOLD}{Color.CYAN}Image update preview{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}     {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END}    {dep_name}")
     print(f"{Color.BLUE}Container:{Color.END}     {container_name}")
     print(f"{Color.BLUE}Current image:{Color.END} {current_image}")
     print(f"{Color.BLUE}Target image:{Color.END}  {Color.YELLOW}{new_image}{Color.END}")
     print()
     print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
-    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+    print(f"{Color.YELLOW}{' '.join(shlex.quote(part) for part in update_cmd)}{Color.END}")
 
     if not _input_yes_no("Proceed with image update?", default=True):
         cprint(Color.YELLOW, "Image update cancelled.")
         _pause()
         return
 
-    result = subprocess.run(
-        update_cmd,
-        capture_output=True,
-        text=True
-    )
+    _print_command(update_cmd)
+    result = subprocess.run(update_cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
         print()
@@ -766,10 +973,9 @@ def update_deployment_image():
         print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
         print(f"{Color.GREEN}{result.stdout.strip()}{Color.END}")
 
-    try:
-        updated_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.YELLOW, f"Image updated, but failed to fetch updated deployment state: {e}")
+    updated_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.YELLOW, f"Image updated, but failed to fetch updated deployment state: {err}")
         _pause()
         return
 
@@ -783,6 +989,7 @@ def update_deployment_image():
     numbers = _get_deployment_status_numbers(updated_json)
 
     print(f"\n{Color.BOLD}{Color.CYAN}Updated deployment status{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}        {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
     print(f"{Color.BLUE}Container:{Color.END}        {container_name}")
     print(f"{Color.BLUE}Previous image:{Color.END}   {current_image}")
@@ -800,13 +1007,7 @@ def update_deployment_image():
 
 
 def rollout_status_deployment():
-    """
-    Show rollout status for a selected Deployment.
-    Improved logic:
-    - distinguish true failure from timeout
-    - detect 'timed out but appears fully rolled out'
-    """
-    print(f"\n{Color.BOLD}{Color.CYAN}--- Rollout Status ---{Color.END}")
+    print(f"\n{_title_with_ns('Rollout Status')}")
 
     result = list_deployments_with_numbers()
     if result is None:
@@ -821,7 +1022,7 @@ def rollout_status_deployment():
         return
 
     identifier = _input_required("Enter deployment number or name")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
@@ -831,20 +1032,19 @@ def rollout_status_deployment():
     timeout = _input_default("Enter rollout timeout", "180s")
 
     rollout_cmd = [
-        "kubectl",
-        "rollout",
-        "status",
+        "kubectl", "rollout", "status",
         f"deployment/{dep_name}",
-        f"--timeout={timeout}"
+        f"--timeout={timeout}",
+        "-n", CURRENT_NAMESPACE
     ]
-    cmd_display = " ".join(shlex.quote(part) for part in rollout_cmd)
 
     print(f"\n{Color.BOLD}{Color.CYAN}Rollout status preview{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}  {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
     print(f"{Color.BLUE}Timeout:{Color.END}    {Color.YELLOW}{timeout}{Color.END}")
     print()
     print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
-    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+    print(f"{Color.YELLOW}{' '.join(shlex.quote(part) for part in rollout_cmd)}{Color.END}")
 
     if not _input_yes_no("Proceed with rollout status check?", default=True):
         cprint(Color.YELLOW, "Rollout status check cancelled.")
@@ -853,20 +1053,14 @@ def rollout_status_deployment():
 
     print()
     cprint(Color.CYAN, "Checking rollout status...")
-
-    result = subprocess.run(
-        rollout_cmd,
-        capture_output=True,
-        text=True
-    )
+    _print_command(rollout_cmd)
+    result = subprocess.run(rollout_cmd, capture_output=True, text=True)
 
     print()
-
     raw_output = (result.stderr or result.stdout or "").strip()
 
-    try:
-        dep_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
+    dep_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
         if result.returncode == 0:
             cprint(Color.GREEN, "Rollout status completed successfully.")
             if result.stdout.strip():
@@ -877,7 +1071,7 @@ def rollout_status_deployment():
             if raw_output:
                 print(f"{Color.RED}{raw_output}{Color.END}")
 
-        cprint(Color.YELLOW, f"Failed to fetch deployment details after rollout check: {e}")
+        cprint(Color.YELLOW, f"Failed to fetch deployment details after rollout check: {err}")
         _pause()
         return
 
@@ -909,10 +1103,7 @@ def rollout_status_deployment():
 
 
 def view_rollout_history():
-    """
-    View rollout history for a selected Deployment.
-    """
-    print(f"\n{Color.BOLD}{Color.CYAN}--- View Rollout History ---{Color.END}")
+    print(f"\n{_title_with_ns('View Rollout History')}")
 
     result = list_deployments_with_numbers()
     if result is None:
@@ -927,17 +1118,16 @@ def view_rollout_history():
         return
 
     identifier = _input_required("Enter deployment number or name")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
         _pause()
         return
 
-    try:
-        dep_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.RED, f"Failed to get deployment details: {e}")
+    dep_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.RED, f"Failed to get deployment details: {err}")
         _pause()
         return
 
@@ -946,23 +1136,19 @@ def view_rollout_history():
     image_summary = ", ".join([f"{c.get('name', '')}={c.get('image', '')}" for c in containers])
 
     print(f"\n{Color.BOLD}{Color.CYAN}Current deployment state{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}  {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
     print(f"{Color.BLUE}Revision:{Color.END}   {current_revision}")
     print(f"{Color.BLUE}Images:{Color.END}     {image_summary or 'N/A'}")
 
-    history_cmd = [
-        "kubectl",
-        "rollout",
-        "history",
-        f"deployment/{dep_name}"
-    ]
-    cmd_display = " ".join(shlex.quote(part) for part in history_cmd)
+    history_cmd = ["kubectl", "rollout", "history", f"deployment/{dep_name}", "-n", CURRENT_NAMESPACE]
 
     print(f"\n{Color.BOLD}{Color.CYAN}Rollout history preview{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}  {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
     print()
     print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
-    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+    print(f"{Color.YELLOW}{' '.join(shlex.quote(part) for part in history_cmd)}{Color.END}")
 
     if not _input_yes_no("Proceed with rollout history check?", default=True):
         cprint(Color.YELLOW, "Rollout history check cancelled.")
@@ -971,12 +1157,8 @@ def view_rollout_history():
 
     print()
     cprint(Color.CYAN, "Checking rollout history...")
-
-    result = subprocess.run(
-        history_cmd,
-        capture_output=True,
-        text=True
-    )
+    _print_command(history_cmd)
+    result = subprocess.run(history_cmd, capture_output=True, text=True)
 
     print()
 
@@ -996,10 +1178,7 @@ def view_rollout_history():
 
 
 def view_revision_details():
-    """
-    View rollout history details for a specific revision.
-    """
-    print(f"\n{Color.BOLD}{Color.CYAN}--- View Revision Details ---{Color.END}")
+    print(f"\n{_title_with_ns('View Revision Details')}")
 
     result = list_deployments_with_numbers()
     if result is None:
@@ -1014,17 +1193,16 @@ def view_revision_details():
         return
 
     identifier = _input_required("Enter deployment number or name")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
         _pause()
         return
 
-    try:
-        dep_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.RED, f"Failed to get deployment details: {e}")
+    dep_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.RED, f"Failed to get deployment details: {err}")
         _pause()
         return
 
@@ -1033,6 +1211,7 @@ def view_revision_details():
     image_summary = ", ".join([f"{c.get('name', '')}={c.get('image', '')}" for c in containers])
 
     print(f"\n{Color.BOLD}{Color.CYAN}Current deployment state{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}        {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END}       {dep_name}")
     print(f"{Color.BLUE}Current revision:{Color.END} {current_revision}")
     print(f"{Color.BLUE}Images:{Color.END}           {image_summary or 'N/A'}")
@@ -1045,20 +1224,19 @@ def view_revision_details():
         return
 
     revision_cmd = [
-        "kubectl",
-        "rollout",
-        "history",
+        "kubectl", "rollout", "history",
         f"deployment/{dep_name}",
-        f"--revision={revision}"
+        f"--revision={revision}",
+        "-n", CURRENT_NAMESPACE
     ]
-    cmd_display = " ".join(shlex.quote(part) for part in revision_cmd)
 
     print(f"\n{Color.BOLD}{Color.CYAN}Revision details preview{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}  {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
     print(f"{Color.BLUE}Revision:{Color.END}   {revision}")
     print()
     print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
-    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+    print(f"{Color.YELLOW}{' '.join(shlex.quote(part) for part in revision_cmd)}{Color.END}")
 
     if not _input_yes_no("Proceed with revision details check?", default=True):
         cprint(Color.YELLOW, "Revision details check cancelled.")
@@ -1067,12 +1245,8 @@ def view_revision_details():
 
     print()
     cprint(Color.CYAN, "Checking revision details...")
-
-    result = subprocess.run(
-        revision_cmd,
-        capture_output=True,
-        text=True
-    )
+    _print_command(revision_cmd)
+    result = subprocess.run(revision_cmd, capture_output=True, text=True)
 
     print()
 
@@ -1092,10 +1266,7 @@ def view_revision_details():
 
 
 def rollback_deployment():
-    """
-    Roll back a Deployment to the previous revision.
-    """
-    print(f"\n{Color.BOLD}{Color.CYAN}--- Roll Back Deployment ---{Color.END}")
+    print(f"\n{_title_with_ns('Roll Back Deployment')}")
 
     result = list_deployments_with_numbers()
     if result is None:
@@ -1110,17 +1281,16 @@ def rollback_deployment():
         return
 
     identifier = _input_required("Enter deployment number or name")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
         _pause()
         return
 
-    try:
-        dep_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.RED, f"Failed to get deployment details: {e}")
+    dep_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.RED, f"Failed to get deployment details: {err}")
         _pause()
         return
 
@@ -1129,35 +1299,28 @@ def rollback_deployment():
     image_summary = ", ".join([f"{c.get('name', '')}={c.get('image', '')}" for c in containers])
 
     print(f"\n{Color.BOLD}{Color.CYAN}Current deployment state{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}  {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
     print(f"{Color.BLUE}Revision:{Color.END}   {current_revision}")
     print(f"{Color.BLUE}Images:{Color.END}     {image_summary or 'N/A'}")
 
-    rollback_cmd = [
-        "kubectl",
-        "rollout",
-        "undo",
-        f"deployment/{dep_name}"
-    ]
-    cmd_display = " ".join(shlex.quote(part) for part in rollback_cmd)
+    rollback_cmd = ["kubectl", "rollout", "undo", f"deployment/{dep_name}", "-n", CURRENT_NAMESPACE]
 
     print(f"\n{Color.BOLD}{Color.CYAN}Rollback preview{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}  {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END} {dep_name}")
     print(f"{Color.BLUE}Revision:{Color.END}   {current_revision}")
     print()
     print(f"{Color.BOLD}{Color.YELLOW}kubectl command:{Color.END}")
-    print(f"{Color.YELLOW}{cmd_display}{Color.END}")
+    print(f"{Color.YELLOW}{' '.join(shlex.quote(part) for part in rollback_cmd)}{Color.END}")
 
     if not _input_yes_no("Proceed with rollback?", default=True):
         cprint(Color.YELLOW, "Rollback cancelled.")
         _pause()
         return
 
-    result = subprocess.run(
-        rollback_cmd,
-        capture_output=True,
-        text=True
-    )
+    _print_command(rollback_cmd)
+    result = subprocess.run(rollback_cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
         print()
@@ -1176,10 +1339,9 @@ def rollback_deployment():
         print(f"{Color.BOLD}{Color.GREEN}kubectl output:{Color.END}")
         print(f"{Color.GREEN}{result.stdout.strip()}{Color.END}")
 
-    try:
-        updated_json = client.get_json("deployment", extra_args=[dep_name])
-    except K8sClientError as e:
-        cprint(Color.YELLOW, f"Rollback applied, but failed to fetch updated deployment state: {e}")
+    updated_json, err = _run_kubectl_json(["get", "deployment", dep_name] + _ns_args())
+    if err:
+        cprint(Color.YELLOW, f"Rollback applied, but failed to fetch updated deployment state: {err}")
         _pause()
         return
 
@@ -1190,6 +1352,7 @@ def rollback_deployment():
     numbers = _get_deployment_status_numbers(updated_json)
 
     print(f"\n{Color.BOLD}{Color.CYAN}Updated deployment status{Color.END}")
+    print(f"{Color.BLUE}Namespace:{Color.END}         {_highlight(CURRENT_NAMESPACE)}")
     print(f"{Color.BLUE}Deployment:{Color.END}        {dep_name}")
     print(f"{Color.BLUE}Previous revision:{Color.END} {current_revision}")
     print(f"{Color.BLUE}Current revision:{Color.END}  {new_revision}")
@@ -1206,251 +1369,7 @@ def rollback_deployment():
     _pause()
 
 
-def generate_deployment_template():
-    """
-    Generate a basic Deployment YAML template file name and content.
-    """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"deployment_{timestamp}.yaml"
-    template = """# Kubernetes Deployment YAML Template
-# Edit this file to create your Deployment
-
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-deployment
-  labels:
-    app: my-app
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: my-app
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      containers:
-      - name: my-container
-        image: nginx:latest
-        ports:
-        - containerPort: 80
-        # env:
-        # - name: ENV_VAR_NAME
-        #   value: "value"
-        # resources:
-        #   requests:
-        #     cpu: "100m"
-        #     memory: "128Mi"
-        #   limits:
-        #     cpu: "300m"
-        #     memory: "256Mi"
-        # readinessProbe:
-        #   httpGet:
-        #     path: /
-        #     port: 80
-        #   initialDelaySeconds: 5
-        #   periodSeconds: 10
-        # livenessProbe:
-        #   httpGet:
-        #     path: /
-        #     port: 80
-        #   initialDelaySeconds: 10
-        #   periodSeconds: 20
-"""
-    return filename, template
-
-
-def deployment_yaml_editor_mode():
-    """
-    Create a YAML template file, open it in vim, validate it, and apply it.
-    """
-    print("\n--- Create Deployment (YAML Editor Mode) ---")
-    filename, template = generate_deployment_template()
-
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(template)
-
-    cprint(Color.GREEN, f"Template file created: {filename}")
-
-    if not _ensure_vim_installed():
-        return
-
-    if not _open_in_vim(filename):
-        cprint(Color.RED, "Failed to open vim.")
-        return
-
-    while True:
-        valid, err = _validate_yaml_syntax(filename)
-        if not valid:
-            cprint(Color.RED, f"YAML syntax validation failed: {err}")
-            if not _input_yes_no("Edit the file again?", default=True):
-                cprint(Color.YELLOW, f"Aborted. File kept: {filename}")
-                return
-            _open_in_vim(filename)
-            continue
-
-        kubectl_valid, kubectl_err = _validate_with_kubectl(filename)
-        if not kubectl_valid:
-            cprint(Color.RED, f"kubectl validation failed: {kubectl_err}")
-            if not _input_yes_no("Edit the file again?", default=True):
-                cprint(Color.YELLOW, f"Aborted. File kept: {filename}")
-                return
-            _open_in_vim(filename)
-            continue
-
-        break
-
-    result = subprocess.run(
-        ["kubectl", "apply", "-f", filename],
-        capture_output=True,
-        text=True
-    )
-
-    if result.returncode == 0:
-        cprint(Color.GREEN, "Deployment applied successfully.")
-        if result.stdout.strip():
-            print(result.stdout.strip())
-    else:
-        cprint(Color.RED, "Failed to apply deployment.")
-        if result.stderr.strip():
-            print(result.stderr.strip())
-
-    _pause()
-
-
-def delete_deployment():
-    """
-    Delete one or more Deployments by number or name.
-    """
-    while True:
-        result = list_deployments_with_numbers()
-        if result is None:
-            cprint(Color.YELLOW, "No deployments available.")
-            return
-
-        numbered_list, dep_map = result
-        if not numbered_list:
-            cprint(Color.YELLOW, "No deployments available.")
-            return
-
-        print("\nEnter one or more deployment numbers/names separated by spaces.")
-        print("Enter 'q' to quit or 'menu' to go back.")
-        identifier = input("\nDeployment number or name to delete: ").strip().lower()
-
-        if identifier in ["q", "quit"]:
-            cprint(Color.YELLOW, "Exiting delete mode.")
-            return
-        if identifier in ["menu", "back"]:
-            cprint(Color.YELLOW, "Returning to menu.")
-            return
-        if not identifier:
-            cprint(Color.YELLOW, "No input provided.")
-            return
-
-        deps_to_delete = []
-
-        if " " in identifier:
-            parts = identifier.split()
-            for part in parts:
-                if part in dep_map:
-                    deps_to_delete.append(dep_map[part])
-                else:
-                    cprint(Color.RED, f"Deployment not found: {part}")
-        else:
-            dep_name = resolve_deployment_identifier(identifier, dep_map)
-            if dep_name:
-                deps_to_delete.append(dep_name)
-            else:
-                cprint(Color.RED, f"Deployment not found: {identifier}")
-                continue
-
-        if not deps_to_delete:
-            cprint(Color.YELLOW, "No valid deployments selected.")
-            continue
-
-        print("\nSelected Deployments:")
-        for dep in deps_to_delete:
-            print(f"  - {dep}")
-
-        if _input_yes_no("Confirm deletion?", default=False):
-            success = 0
-            failed = 0
-
-            for dep in deps_to_delete:
-                result = subprocess.run(
-                    ["kubectl", "delete", "deployment", dep],
-                    capture_output=True,
-                    text=True
-                )
-                if result.returncode == 0:
-                    cprint(Color.GREEN, f"Deleted deployment: {dep}")
-                    success += 1
-                else:
-                    cprint(Color.RED, f"Failed to delete deployment: {dep}")
-                    if result.stderr.strip():
-                        print(result.stderr.strip())
-                    failed += 1
-
-            print("\nDelete summary:")
-            cprint(Color.GREEN, f"  Success: {success}")
-            if failed > 0:
-                cprint(Color.RED, f"  Failed: {failed}")
-
-            if not _input_yes_no("Delete more deployments?", default=False):
-                return
-        else:
-            cprint(Color.YELLOW, "Deletion cancelled.")
-            if not _input_yes_no("Try again?", default=True):
-                return
-
-
-def describe_deployment():
-    """
-    Show 'kubectl describe deployment' output for a selected Deployment.
-    """
-    result = list_deployments_with_numbers()
-    if result is None:
-        cprint(Color.YELLOW, "No deployments available.")
-        _pause()
-        return
-
-    numbered_list, dep_map = result
-    if not numbered_list:
-        cprint(Color.YELLOW, "No deployments available.")
-        _pause()
-        return
-
-    identifier = _input_required("Enter deployment number or name to view details")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
-
-    if not dep_name:
-        cprint(Color.RED, f"Deployment not found: {identifier}")
-        _pause()
-        return
-
-    print(f"Fetching details for deployment '{dep_name}'...")
-    result = subprocess.run(
-        ["kubectl", "describe", "deployment", dep_name],
-        capture_output=True,
-        text=True
-    )
-
-    if result.returncode == 0:
-        print(result.stdout)
-    else:
-        cprint(Color.RED, f"Failed to view deployment details: {dep_name}")
-        if result.stderr.strip():
-            print(result.stderr.strip())
-
-    _pause()
-
-
 def show_deployment_yaml():
-    """
-    Print deployment YAML to the screen.
-    """
     result = list_deployments_with_numbers()
     if result is None:
         cprint(Color.YELLOW, "No deployments available.")
@@ -1462,34 +1381,26 @@ def show_deployment_yaml():
         return
 
     identifier = _input_required("Enter deployment number or name to display YAML")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
         _pause()
         return
 
-    result = subprocess.run(
-        ["kubectl", "get", "deployment", dep_name, "-o", "yaml"],
-        capture_output=True,
-        text=True
-    )
+    output, err = _run_kubectl_text(["get", "deployment", dep_name] + _ns_args() + ["-o", "yaml"])
 
-    if result.returncode == 0:
-        print("\nDeployment YAML:\n")
-        print(result.stdout)
-    else:
+    if err:
         cprint(Color.RED, f"Failed to export YAML for deployment: {dep_name}")
-        if result.stderr.strip():
-            print(result.stderr.strip())
+        print(err)
+    else:
+        print("\nDeployment YAML:\n")
+        print(output)
 
     _pause()
 
 
 def save_deployment_yaml():
-    """
-    Save deployment YAML to a local file.
-    """
     result = list_deployments_with_numbers()
     if result is None:
         cprint(Color.YELLOW, "No deployments available.")
@@ -1501,36 +1412,31 @@ def save_deployment_yaml():
         return
 
     identifier = _input_required("Enter deployment number or name to save YAML")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
         _pause()
         return
 
-    filename = f"deployment_{dep_name}.yaml"
+    filename = f"deployment_{CURRENT_NAMESPACE}_{dep_name}.yaml"
     if os.path.exists(filename):
         if not _input_yes_no(f"File '{filename}' already exists. Overwrite?", default=False):
             cprint(Color.YELLOW, "Save cancelled.")
             _pause()
             return
 
-    result = subprocess.run(
-        ["kubectl", "get", "deployment", dep_name, "-o", "yaml"],
-        capture_output=True,
-        text=True
-    )
+    output, err = _run_kubectl_text(["get", "deployment", dep_name] + _ns_args() + ["-o", "yaml"])
 
-    if result.returncode != 0:
+    if err:
         cprint(Color.RED, f"Failed to export YAML for deployment: {dep_name}")
-        if result.stderr.strip():
-            print(result.stderr.strip())
+        print(err)
         _pause()
         return
 
     try:
         with open(filename, "w", encoding="utf-8") as f:
-            f.write(result.stdout)
+            f.write(output)
         cprint(Color.GREEN, f"YAML saved successfully: {filename}")
     except Exception as e:
         cprint(Color.RED, f"Failed to save YAML file: {e}")
@@ -1539,14 +1445,11 @@ def save_deployment_yaml():
 
 
 def export_deployment_menu():
-    """
-    Export Deployment menu.
-    """
     while True:
-        print("\n--- Export Deployment YAML ---")
-        print("1. Show Deployment YAML (print to screen)")
-        print("2. Save Deployment YAML to file (local file)")
-        print("3. Back (return)")
+        print(f"\n{_title_with_ns('Export Deployment YAML')}")
+        _menu_line("1", "Show Deployment YAML", "print to screen")
+        _menu_line("2", "Save Deployment YAML to file", "local file")
+        _menu_line("3", "Back", "return")
         choice = input("Choose (1-3): ").strip()
 
         if choice == "1":
@@ -1560,9 +1463,6 @@ def export_deployment_menu():
 
 
 def edit_deployment_direct():
-    """
-    Use 'kubectl edit deployment' directly.
-    """
     while True:
         result = list_deployments_with_numbers()
         if result is None:
@@ -1586,13 +1486,15 @@ def edit_deployment_direct():
             cprint(Color.YELLOW, "Returning to menu.")
             return
 
-        dep_name = resolve_deployment_identifier(identifier, dep_map)
+        dep_name = _resolve_deployment_identifier(identifier, dep_map)
         if not dep_name:
             cprint(Color.RED, f"Deployment not found: {identifier}")
             continue
 
+        cmd = ["kubectl", "edit", "deployment", dep_name, "-n", CURRENT_NAMESPACE]
         cprint(Color.BLUE, f"Opening deployment '{dep_name}' in kubectl edit...")
-        result = subprocess.run(["kubectl", "edit", "deployment", dep_name])
+        _print_command(cmd)
+        result = subprocess.run(cmd)
 
         if result.returncode == 0:
             cprint(Color.GREEN, "Deployment edited successfully.")
@@ -1604,9 +1506,6 @@ def edit_deployment_direct():
 
 
 def edit_deployment_yaml():
-    """
-    Apply updates to a deployment from a local YAML file.
-    """
     result = list_deployments_with_numbers()
     if result is None:
         cprint(Color.YELLOW, "No deployments available.")
@@ -1620,7 +1519,7 @@ def edit_deployment_yaml():
         return
 
     identifier = _input_required("Enter deployment number or name")
-    dep_name = resolve_deployment_identifier(identifier, dep_map)
+    dep_name = _resolve_deployment_identifier(identifier, dep_map)
 
     if not dep_name:
         cprint(Color.RED, f"Deployment not found: {identifier}")
@@ -1656,11 +1555,9 @@ def edit_deployment_yaml():
         _pause()
         return
 
-    result = subprocess.run(
-        ["kubectl", "apply", "-f", yaml_path],
-        capture_output=True,
-        text=True
-    )
+    cmd = ["kubectl", "apply", "-f", yaml_path]
+    _print_command(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode == 0:
         cprint(Color.GREEN, "Deployment YAML applied successfully.")
@@ -1675,14 +1572,11 @@ def edit_deployment_yaml():
 
 
 def edit_deployment_menu():
-    """
-    Edit Deployment menu.
-    """
     while True:
-        print("\n--- Edit Deployment ---")
-        print("1. Edit deployment directly with kubectl (live edit)")
-        print("2. Edit from YAML file (apply file)")
-        print("3. Back (return)")
+        print(f"\n{_title_with_ns('Edit Deployment')}")
+        _menu_line("1", "Edit deployment directly with kubectl", "live edit")
+        _menu_line("2", "Edit from YAML file", "apply file")
+        _menu_line("3", "Back", "return")
         choice = input("Choose (1-3): ").strip()
 
         if choice == "1":
@@ -1695,48 +1589,106 @@ def edit_deployment_menu():
             cprint(Color.RED, "Invalid option.")
 
 
-def create_deployment_menu():
-    """
-    Create Deployment submenu.
-    """
+def delete_deployment():
     while True:
-        print("\n--- Create Deployment Options ---")
-        print("Note: Quick Deploy probe support is currently basic and should be enhanced later.")
-        print("1. Quick Deploy (interactive wizard)")
-        print("2. Create YAML (manual edit)")
-        print("3. Back (return)")
-        choice = input("Choose (1-3): ").strip()
+        result = list_deployments_with_numbers()
+        if result is None:
+            cprint(Color.YELLOW, "No deployments available.")
+            return
 
-        if choice == "1":
-            quick_deploy_deployment()
-        elif choice == "2":
-            deployment_yaml_editor_mode()
-        elif choice == "3":
-            break
+        numbered_list, dep_map = result
+        if not numbered_list:
+            cprint(Color.YELLOW, "No deployments available.")
+            return
+
+        print("\nEnter one or more deployment numbers/names separated by spaces.")
+        print("Enter 'q' to quit or 'menu' to go back.")
+        identifier = input("\nDeployment number or name to delete: ").strip().lower()
+
+        if identifier in ["q", "quit"]:
+            cprint(Color.YELLOW, "Exiting delete mode.")
+            return
+        if identifier in ["menu", "back"]:
+            cprint(Color.YELLOW, "Returning to menu.")
+            return
+        if not identifier:
+            cprint(Color.YELLOW, "No input provided.")
+            return
+
+        deps_to_delete = []
+
+        if " " in identifier:
+            parts = identifier.split()
+            for part in parts:
+                if part in dep_map:
+                    deps_to_delete.append(dep_map[part])
+                else:
+                    cprint(Color.RED, f"Deployment not found: {part}")
         else:
-            cprint(Color.RED, "Invalid option.")
+            dep_name = _resolve_deployment_identifier(identifier, dep_map)
+            if dep_name:
+                deps_to_delete.append(dep_name)
+            else:
+                cprint(Color.RED, f"Deployment not found: {identifier}")
+                continue
+
+        if not deps_to_delete:
+            cprint(Color.YELLOW, "No valid deployments selected.")
+            continue
+
+        print(f"\nSelected Deployments [{_highlight(f'NAMESPACE: {CURRENT_NAMESPACE}')}]")
+        for dep in deps_to_delete:
+            print(f"  - {dep}")
+
+        if _input_yes_no("Confirm deletion?", default=False):
+            success = 0
+            failed = 0
+
+            for dep in deps_to_delete:
+                cmd = ["kubectl", "delete", "deployment", dep, "-n", CURRENT_NAMESPACE]
+                _print_command(cmd)
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    cprint(Color.GREEN, f"Deleted deployment: {dep}")
+                    success += 1
+                else:
+                    cprint(Color.RED, f"Failed to delete deployment: {dep}")
+                    if result.stderr.strip():
+                        print(result.stderr.strip())
+                    failed += 1
+
+            print("\nDelete summary:")
+            cprint(Color.GREEN, f"  Success: {success}")
+            if failed > 0:
+                cprint(Color.RED, f"  Failed: {failed}")
+
+            if not _input_yes_no("Delete more deployments?", default=False):
+                return
+        else:
+            cprint(Color.YELLOW, "Deletion cancelled.")
+            if not _input_yes_no("Try again?", default=True):
+                return
 
 
 def deployment_menu():
-    """
-    Deployment main menu.
-    """
     while True:
-        print("\n--- Deployment Management ---")
-        print("1. List Deployments (overview)")
-        print("2. View Deployment Details (kubectl describe)")
-        print("3. Create Deployment (quick deploy / YAML)")
-        print("4. Scale Replicas (change replica count)")
-        print("5. Update Deployment Image (set image)")
-        print("6. Check Rollout Status (monitor progress)")
-        print("7. View Rollout History (revision list)")
-        print("8. View Revision Details (specific revision)")
-        print("9. Roll Back Deployment (previous revision)")
-        print("10. Edit Deployment (live / YAML)")
-        print("11. Export Deployment YAML (show / save)")
-        print("12. Delete Deployment (dangerous)")
-        print("13. Back to Main Menu (return)")
-        choice = input("Choose (1-13): ").strip()
+        print(f"\n{_title_with_ns('Deployment Management')}")
+        _menu_line("1", "List Deployments", "overview")
+        _menu_line("2", "View Deployment Details", "kubectl describe")
+        _menu_line("3", "Create Deployment", "quick deploy / YAML")
+        _menu_line("4", "Scale Replicas", "change replica count")
+        _menu_line("5", "Update Deployment Image", "set image")
+        _menu_line("6", "Check Rollout Status", "monitor progress")
+        _menu_line("7", "View Rollout History", "revision list")
+        _menu_line("8", "View Revision Details", "specific revision")
+        _menu_line("9", "Roll Back Deployment", "previous revision")
+        _menu_line("10", "Edit Deployment", "live / YAML")
+        _menu_line("11", "Export Deployment YAML", "show / save")
+        _menu_line("12", "Delete Deployment", "dangerous", danger=True)
+        _menu_line("13", "Set Namespace", "list or manual input")
+        _menu_line("14", "Reset Namespace to default")
+        _menu_line("15", "Back to Main Menu", "return")
+        choice = input("Choose (1-15): ").strip()
 
         if choice == "1":
             list_deployments()
@@ -1763,6 +1715,10 @@ def deployment_menu():
         elif choice == "12":
             delete_deployment()
         elif choice == "13":
+            _set_namespace()
+        elif choice == "14":
+            _reset_namespace()
+        elif choice == "15":
             break
         else:
             cprint(Color.RED, "Invalid option.")

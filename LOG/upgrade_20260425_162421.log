@@ -1,0 +1,17 @@
+[2026-04-25 16:24:21] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-04-25 16:24:24] [INFO] Pre-check completed. Total source files: 1
+[2026-04-25 16:24:27] [INFO] Starting upgrade execution for 1 READY file(s).
+[2026-04-25 16:24:27] [INFO] Backed up /home/jun/k8s_manager/resources/node.py -> /home/jun/k8s_manager/resources/node.py.bak
+[2026-04-25 16:24:27] [INFO] Original permissions: 0o100664
+[2026-04-25 16:24:27] [INFO] Copied /home/jun/k8s_manager/UPGRADE_TMP/node.py -> /home/jun/k8s_manager/resources/node.py
+[2026-04-25 16:24:27] [INFO] Restored permissions to 0o100664
+[2026-04-25 16:24:28] [INFO] Performing post-upgrade health check...
+[2026-04-25 16:24:29] [INFO] Import check passed: main
+[2026-04-25 16:24:29] [INFO] Import check passed: resources.node
+[2026-04-25 16:24:30] [INFO] Import check passed: utils.color
+[2026-04-25 16:24:30] [INFO] Import check passed: version
+[2026-04-25 16:24:30] [INFO] Smoke check passed.
+[2026-04-25 16:24:30] [INFO] Health check succeeded.
+[2026-04-25 16:24:30] [INFO] Health check passed. Upgrade successful.
+[2026-04-25 16:24:30] [INFO] Removed backup /home/jun/k8s_manager/resources/node.py.bak
+[2026-04-25 16:24:32] [INFO] Cleared contents of UPGRADE_TMP directory: /home/jun/k8s_manager/UPGRADE_TMP

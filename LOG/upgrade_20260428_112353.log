@@ -1,0 +1,3 @@
+[2026-04-28 11:23:53] [INFO] === Upgrade started from /home/jun/k8s_manager/UPGRADE_TMP ===
+[2026-04-28 11:23:56] [INFO] Pre-check completed. Total source files: 1
+[2026-04-28 11:23:57] [ERROR] No READY files after pre-check. Upgrade aborted.
